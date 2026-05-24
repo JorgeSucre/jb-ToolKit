@@ -1,0 +1,8 @@
+brew "wget"
+brew "htop"
+brew "btop"
+brew "ncdu"
+brew "dust"
+brew "mac-cleanup-go"
+
+cask "floorp"

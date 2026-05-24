@@ -1,0 +1,104 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# asegurar permisos
+chmod +x "$BASE_DIR/core/"*.sh 2>/dev/null || true
+
+run_script() {
+    local label="$1"
+    local script="$2"
+
+    echo "$label"
+    echo ""
+
+    if [[ -f "$script" ]]; then
+        bash "$script" || echo "❌ Error ejecutando $(basename "$script")"
+    else
+        echo "❌ $(basename "$script") no encontrado"
+    fi
+}
+
+# =========================
+# Función pausa estándar
+# =========================
+pause() {
+    echo ""
+    read -r -p "Presiona Enter para volver al menú..." _
+}
+
+trap 'echo ""; echo "👋 Saliendo..."; exit 0' INT
+
+# =========================
+# Loop principal robusto
+# =========================
+while true; do
+    clear
+
+    echo "=============================="
+    echo "   JB TOOLKIT 🍺"
+    echo "=============================="
+    echo "1) Initial Setup"
+    echo "2) Diagnostics (Scan System)"
+    echo "3) Maintenance (Fix Issues)"
+    echo "4) Report (Export Results)"
+    echo "5) Exit"
+    echo ""
+
+    read -r -p "Option: " opt
+    opt="$(echo "$opt" | xargs)"  # trim spaces
+    echo ""
+
+    [[ -z "$opt" ]] && continue
+
+    case "$opt" in
+        1)
+            run_script "👉 Ejecutando setup..." "$BASE_DIR/core/bootstrap.sh"
+            pause
+            ;;
+        2)
+            run_script "🔍 Ejecutando diagnóstico..." "$BASE_DIR/core/diagnostics.sh"
+            pause
+            ;;
+        3)
+            run_script "🛠️ Ejecutando mantenimiento..." "$BASE_DIR/core/maintenance.sh"
+            pause
+            ;;
+        4)
+            echo "📊 Generando reporte..."
+            echo ""
+            if [[ -f "$BASE_DIR/core/report.sh" ]]; then
+                bash "$BASE_DIR/core/report.sh" || echo "❌ Error en reporte"
+
+                echo ""
+                read -r -p "¿Generar PDF también? (y/n): " pdfopt
+                if [[ "$pdfopt" =~ ^[YySs]$ ]]; then
+                    if ! python3 -c "import reportlab" &>/dev/null; then
+                        echo "📦 Instalando reportlab..."
+                        python3 -m pip install --user reportlab --quiet || {
+                            echo "❌ No se pudo instalar reportlab"
+                        }
+                    fi
+
+                    if python3 -c "import reportlab" &>/dev/null; then
+                        python3 "$BASE_DIR/core/report_pdf.py" || echo "❌ Error generando PDF"
+                    fi
+                fi
+            else
+                echo "❌ report.sh no encontrado"
+            fi
+            pause
+            ;;
+        5)
+            echo "👋 Saliendo..."
+            exit 0
+            ;;
+        *)
+            echo "❌ Opción inválida. Selecciona 1–5."
+            sleep 1
+            ;;
+    esac
+
+done
