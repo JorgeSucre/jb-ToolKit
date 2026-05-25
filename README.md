@@ -31,32 +31,6 @@ Todo desde una interfaz rápida en Terminal, pensada tanto para técnicos como p
 
 ⸻
 
-🧠 Arquitectura
-
-El proyecto ahora utiliza una estructura modular:
-
-core/
-├── bootstrap.sh
-├── diagnostics.sh
-├── maintenance.sh
-├── report.sh
-├── utils.sh
-└── bootstrap/
-    ├── brew.sh
-    ├── hardware.sh
-    ├── packages.sh
-    ├── stages.sh
-    └── ui.sh
-
-Esto permite:
-
-* mantenimiento más sencillo
-* código reutilizable
-* mejor estabilidad
-* escalabilidad futura
-
-⸻
-
 💻 Requisitos
 
 * macOS Monterey o superior recomendado
