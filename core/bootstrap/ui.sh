@@ -6,19 +6,7 @@
 # UI helpers
 # =========================
 
-if [[ -t 1 ]]; then
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    RED='\033[0;31m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
-else
-    GREEN=''
-    YELLOW=''
-    RED=''
-    BLUE=''
-    NC=''
-fi
+# Colors are inherited from core/utils.sh
 
 # =========================
 # Sections

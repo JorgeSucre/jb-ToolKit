@@ -6,23 +6,7 @@ set +e  # evitar fallos por comandos informativos
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
 
-# ANSI colors (solo terminal interactiva)
-if [[ -t 1 ]]; then
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    RED='\033[0;31m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
-else
-    GREEN=''
-    YELLOW=''
-    RED=''
-    BLUE=''
-    NC=''
-fi
-
-STATE_FILE="$BASE_DIR/logs/state.env"
-mkdir -p "$BASE_DIR/logs"
+# Colors and STATE_FILE are inherited from core/utils.sh
 
 # Helper para normalizar nombres de apps
 normalize_app_name() {
@@ -53,41 +37,19 @@ echo ""
 echo "🧠 Sistema"
 echo "----------------------------------------"
 
-CPU_NAME=$(sysctl -n machdep.cpu.brand_string)
+SCORE=$(calculate_health_score)
+
+CPU_NAME=$(get_cpu_brand_string)
 CPU_CORES=$(sysctl -n hw.physicalcpu 2>/dev/null || echo "?")
 CPU="${CPU_NAME} • ${CPU_CORES} núcleos"
 
 printf "%-15s %s\n" "CPU:" "$CPU"
 
-# RAM (estimación más realista para macOS)
+# RAM unificada
 TOTAL_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
 TOTAL_MB=$((TOTAL_BYTES / 1024 / 1024))
-
-MEM_PRESSURE=$(memory_pressure 2>/dev/null \
-    | awk -F': ' '/System-wide memory free percentage/ {print $2}' \
-    | tr -d '%')
-
-if [[ -z "$MEM_PRESSURE" ]]; then
-    FREE_PAGES=$(vm_stat | awk '/Pages free/ {print $3}' | tr -d '.')
-    SPEC_PAGES=$(vm_stat | awk '/Pages speculative/ {print $3}' | tr -d '.')
-    FREE_PAGES=${FREE_PAGES:-0}
-    SPEC_PAGES=${SPEC_PAGES:-0}
-
-    FREE_MB=$(((FREE_PAGES + SPEC_PAGES) * 4096 / 1024 / 1024))
-    if [[ "$TOTAL_MB" -gt 0 ]]; then
-        MEM_PRESSURE=$((100 - (FREE_MB * 100 / TOTAL_MB)))
-    else
-        MEM_PRESSURE=0
-    fi
-fi
-
-USED_MB=$((TOTAL_MB * (100 - MEM_PRESSURE) / 100))
-if [[ "$TOTAL_MB" -gt 0 ]]; then
-    RAM_PCT=$((USED_MB * 100 / TOTAL_MB))
-else
-    RAM_PCT=0
-fi
-
+RAM_PCT=$SYS_RAM_PCT
+USED_MB=$((TOTAL_MB * RAM_PCT / 100))
 USED_GB=$(awk "BEGIN {printf \"%.1f\", $USED_MB/1024}")
 TOTAL_GB=$(awk "BEGIN {printf \"%.0f\", $TOTAL_MB/1024}")
 
@@ -153,12 +115,7 @@ echo ""
 echo "⚙️ Carga CPU"
 echo "----------------------------------------"
 
-CPU_LOAD=$(top -l 1 | awk '/CPU usage/ {printf "%d%%", ($3 + $5)}')
-
-if [[ -z "$CPU_LOAD" ]]; then
-    CPU_LOAD="0%"
-fi
-
+CPU_LOAD=$SYS_CPU_LOAD
 printf "%-15s %s\n" "Uso CPU:" "$CPU_LOAD"
 
 # =========================
@@ -200,70 +157,10 @@ echo ""
 echo "📊 Health Score"
 echo "----------------------------------------"
 
-# Score inteligente
-DISK_PCT=$(df -h / | awk 'NR==2 {print $5}' | tr -d '%')
-DISK_PCT=${DISK_PCT:-0}
-
-CPU_INT=$(echo "$CPU_LOAD" | tr -d '%' | cut -d'.' -f1)
-
-if [[ -z "$CPU_INT" ]]; then
-    CPU_INT=0
-fi
-
-SCORE=100
-
-# RAM
-if [[ "$RAM_PCT" -gt 85 ]]; then
-    SCORE=$((SCORE - 25))
-elif [[ "$RAM_PCT" -gt 70 ]]; then
-    SCORE=$((SCORE - 10))
-fi
-
-# Disco
-if [[ "$DISK_PCT" -gt 90 ]]; then
-    SCORE=$((SCORE - 25))
-elif [[ "$DISK_PCT" -gt 80 ]]; then
-    SCORE=$((SCORE - 10))
-fi
-
-# CPU
-if [[ "$CPU_INT" -gt 80 ]]; then
-    SCORE=$((SCORE - 15))
-elif [[ "$CPU_INT" -gt 50 ]]; then
-    SCORE=$((SCORE - 5))
-fi
-
-# Cachés grandes
-CACHE_SIZE_MB=$(du -sm ~/Library/Caches 2>/dev/null | awk '{print $1}')
-CACHE_SIZE_MB=${CACHE_SIZE_MB:-0}
-
-if [[ -n "$CACHE_SIZE_MB" && "$CACHE_SIZE_MB" -gt 3000 ]]; then
-    SCORE=$((SCORE - 20))
-elif [[ -n "$CACHE_SIZE_MB" && "$CACHE_SIZE_MB" -gt 2000 ]]; then
-    SCORE=$((SCORE - 15))
-elif [[ -n "$CACHE_SIZE_MB" && "$CACHE_SIZE_MB" -gt 1000 ]]; then
-    SCORE=$((SCORE - 8))
-fi
-
-# Avoid duplicated Applications scans
-QUARANTINE_APPS=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null)
-
-# Apps instaladas desde internet
-QUARANTINE_COUNT=$(echo "$QUARANTINE_APPS" \
-    | while read -r app; do
-        xattr -p com.apple.quarantine "$app" &>/dev/null && echo 1
-      done | wc -l | tr -d ' ')
-
-if [[ "$QUARANTINE_COUNT" -gt 15 ]]; then
-    SCORE=$((SCORE - 10))
-elif [[ "$QUARANTINE_COUNT" -gt 8 ]]; then
-    SCORE=$((SCORE - 5))
-fi
-
-# Evitar negativos
-if [[ "$SCORE" -lt 0 ]]; then
-    SCORE=0
-fi
+# Usar valores ya calculados y cacheados
+DISK_PCT=$SYS_DISK_PCT
+CACHE_SIZE_MB=$SYS_CACHE_SIZE_MB
+QUARANTINE_COUNT=$SYS_QUARANTINE_COUNT
 
 FILLED=$((SCORE / 10))
 EMPTY=$((10 - FILLED))

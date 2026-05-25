@@ -8,19 +8,6 @@ import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(BASE_DIR, "logs", "state.env")
-
-def get_score_before():
-    if not os.path.exists(STATE_FILE):
-        return "N/A"
-    try:
-        with open(STATE_FILE) as f:
-            for line in f:
-                if line.startswith("SCORE_BEFORE="):
-                    return line.strip().split("=", 1)[1]
-    except OSError:
-        pass
-    return "N/A"
-
 def get_state_value(key):
     if not os.path.exists(STATE_FILE):
         return "N/A"
@@ -172,7 +159,7 @@ try:
         ["Campo", "Valor"],
         ["Fecha", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
         ["Modelo", get_output(["sysctl", "-n", "hw.model"])],
-        ["CPU", get_output(["sysctl", "-n", "machdep.cpu.brand_string"])],
+        ["CPU", get_output(["sysctl", "-n", "hw.brand_string"]) or get_output(["sysctl", "-n", "machdep.cpu.brand_string"])],
         ["RAM", f"{used_mb} MB / {total_mb} MB ({ram_pct}%)"],
         ["Disco", disk_summary()],
         ["Homebrew paquetes", brew_package_count()]
@@ -182,21 +169,8 @@ try:
     separator()
 
     # Score comparison
-    score_before = get_score_before()
-
-    # --- Score básico (sin health_score.sh) ---
-    try:
-        disk_percent = disk_usage_percent()
-
-        ram_value = vm_stat_value("Pages free")
-
-        # Score simple
-        disk_score = 100 - disk_percent
-        ram_score = 100 if ram_value > 500000 else 70 if ram_value > 200000 else 40
-
-        score_after = int((disk_score + ram_score) / 2)
-    except (TypeError, ValueError):
-        score_after = 0
+    score_before = get_state_value("SCORE_BEFORE")
+    score_after = get_state_value("SCORE_AFTER")
 
     try:
         diff = int(score_after) - int(score_before) if score_before != "N/A" else 0

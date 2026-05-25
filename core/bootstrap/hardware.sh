@@ -55,13 +55,8 @@ load_hardware_profile() {
 # =========================
 
 detect_model() {
-
-    MODEL=$(system_profiler SPHardwareDataType 2>/dev/null \
-        | awk -F': ' '/Model Name/ {print $2; exit}')
-
-    if [[ -z "$MODEL" ]]; then
-        MODEL="$(sysctl -n hw.model 2>/dev/null || echo Unknown)"
-    fi
+    load_hardware_info
+    MODEL="${HARDWARE_NAME}"
 }
 
 # =========================

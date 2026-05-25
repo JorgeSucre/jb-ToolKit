@@ -1,11 +1,161 @@
 #!/bin/bash
 
+# =========================
+# Base Config & Directories
+# =========================
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export BASE_DIR
+export STATE_FILE="$BASE_DIR/logs/state.env"
+mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
+
+# =========================
+# ANSI Colors (Interactive only)
+# =========================
+if [[ -t 1 ]]; then
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    RED='\033[0;31m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    GREEN=''
+    YELLOW=''
+    RED=''
+    BLUE=''
+    NC=''
+fi
+export GREEN YELLOW RED BLUE NC
+
+# =========================
+# Global System Metrics Cache
+# =========================
+SYS_RAM_PCT=0
+SYS_DISK_PCT=0
+SYS_CPU_LOAD="0%"
+SYS_CACHE_SIZE_MB=0
+SYS_QUARANTINE_COUNT=0
+
+get_cpu_brand_string() {
+    local cpu
+    cpu="$(sysctl -n hw.brand_string 2>/dev/null || sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "No disponible")"
+    echo "$cpu"
+}
+
+calculate_health_score() {
+    local cpu_load cpu_int ram_pct disk_pct cache_size_mb quarantine_count score=100
+
+    # Uso CPU
+    cpu_load=$(top -l 1 | awk '/CPU usage/ {printf "%d%%", ($3 + $5)}' 2>/dev/null)
+    cpu_load=${cpu_load:-0%}
+    cpu_int=$(echo "$cpu_load" | tr -d '%' | cut -d'.' -f1)
+    cpu_int=${cpu_int:-0}
+
+    # RAM (estimación realista para macOS)
+    local total_bytes total_mb mem_pressure free_pages spec_pages free_mb used_mb
+    total_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
+    total_mb=$((total_bytes / 1024 / 1024))
+    mem_pressure=$(memory_pressure 2>/dev/null \
+        | awk -F': ' '/System-wide memory free percentage/ {print $2}' \
+        | tr -d '%' 2>/dev/null)
+
+    if [[ -z "$mem_pressure" ]]; then
+        free_pages=$(vm_stat 2>/dev/null | awk '/Pages free/ {print $3}' | tr -d '.')
+        spec_pages=$(vm_stat 2>/dev/null | awk '/Pages speculative/ {print $3}' | tr -d '.')
+        free_pages=${free_pages:-0}
+        spec_pages=${spec_pages:-0}
+        free_mb=$(((free_pages + spec_pages) * 4096 / 1024 / 1024))
+        if [[ "$total_mb" -gt 0 ]]; then
+            mem_pressure=$((100 - (free_mb * 100 / total_mb)))
+        else
+            mem_pressure=0
+        fi
+    fi
+
+    used_mb=$((total_mb * (100 - mem_pressure) / 100))
+    if [[ "$total_mb" -gt 0 ]]; then
+        ram_pct=$((used_mb * 100 / total_mb))
+    else
+        ram_pct=0
+    fi
+
+    # Disco
+    disk_pct=$(df -h / 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
+    disk_pct=${disk_pct:-0}
+
+    # Caches
+    cache_size_mb=$(du -sm ~/Library/Caches 2>/dev/null | awk '{print $1}')
+    cache_size_mb=${cache_size_mb:-0}
+
+    # Apps com.apple.quarantine
+    local quarantine_apps
+    quarantine_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null)
+    if [[ -n "$quarantine_apps" ]]; then
+        quarantine_count=$(echo "$quarantine_apps" \
+            | while read -r app; do
+                [[ -n "$app" ]] && xattr -p com.apple.quarantine "$app" &>/dev/null && echo 1
+              done | wc -l | tr -d ' ')
+    fi
+
+    # Deducciones de Score
+    # RAM
+    if [[ "$ram_pct" -gt 85 ]]; then
+        score=$((score - 25))
+    elif [[ "$ram_pct" -gt 70 ]]; then
+        score=$((score - 10))
+    fi
+
+    # Disco
+    if [[ "$disk_pct" -gt 90 ]]; then
+        score=$((score - 25))
+    elif [[ "$disk_pct" -gt 80 ]]; then
+        score=$((score - 10))
+    fi
+
+    # CPU
+    if [[ "$cpu_int" -gt 80 ]]; then
+        score=$((score - 15))
+    elif [[ "$cpu_int" -gt 50 ]]; then
+        score=$((score - 5))
+    fi
+
+    # Cachés grandes
+    if [[ "$cache_size_mb" -gt 3000 ]]; then
+        score=$((score - 20))
+    elif [[ "$cache_size_mb" -gt 2000 ]]; then
+        score=$((score - 15))
+    elif [[ "$cache_size_mb" -gt 1000 ]]; then
+        score=$((score - 8))
+    fi
+
+    # Quarantine
+    if [[ "$quarantine_count" -gt 15 ]]; then
+        score=$((score - 10))
+    elif [[ "$quarantine_count" -gt 8 ]]; then
+        score=$((score - 5))
+    fi
+
+    # Evitar negativos
+    if [[ "$score" -lt 0 ]]; then
+        score=0
+    fi
+
+    # Cachear métricas para uso del script invocante
+    SYS_RAM_PCT=$ram_pct
+    SYS_DISK_PCT=$disk_pct
+    SYS_CPU_LOAD=$cpu_load
+    SYS_CACHE_SIZE_MB=$cache_size_mb
+    SYS_QUARANTINE_COUNT=$quarantine_count
+
+    echo "$score"
+}
+
 HARDWARE_MODEL=""
 HARDWARE_NAME=""
 BREW_BIN=""
 
 load_hardware_info() {
     [[ -n "$HARDWARE_MODEL" && -n "$HARDWARE_NAME" ]] && return
+
 
     HARDWARE_MODEL="$(sysctl -n hw.model 2>/dev/null || echo Unknown)"
     HARDWARE_NAME="$(system_profiler SPHardwareDataType -detailLevel mini 2>/dev/null \

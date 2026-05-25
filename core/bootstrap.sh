@@ -87,12 +87,7 @@ print_stage "Sincronizando paquetes"
 
 if brew_available && [[ -f "$BREWFILE" ]]; then
 
-    TEMP_BREWFILE="/tmp/jb_brewfile.$$"
-    cp "$BREWFILE" "$TEMP_BREWFILE"
-
-    if [[ "$INSTALL_OPTIONAL_APPS" != "true" ]]; then
-        sed -i '' '/floorp/d' "$TEMP_BREWFILE"
-    fi
+    prepare_brewfile
 
     EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
     EXPECTED_CASKS=$(grep '^cask ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)

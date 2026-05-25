@@ -11,7 +11,6 @@ export JB_REPORT_ALREADY_RUN=1
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
 
-STATE_FILE="$BASE_DIR/logs/state.env"
 
 state_value() {
     local key="$1"
@@ -89,22 +88,12 @@ section "Resultados"
 
 SCORE_BEFORE="$(state_value SCORE_BEFORE)"
 
-# Score simple basado en RAM + disco (igual que diagnostics)
+SCORE_AFTER=$(calculate_health_score)
 
-DISK_PCT=$(df -h / | awk 'NR==2 {print $5}' | tr -d '%')
-DISK_PCT=${DISK_PCT:-0}
-
-if [[ "$RAM_PCT" -lt 50 ]]; then
-    RAM_SCORE=100
-elif [[ "$RAM_PCT" -lt 70 ]]; then
-    RAM_SCORE=80
-else
-    RAM_SCORE=50
-fi
-
-DISK_SCORE=$((100 - DISK_PCT))
-
-SCORE_AFTER=$(((RAM_SCORE + DISK_SCORE) / 2))
+# Guardar SCORE_AFTER en state.env para el generador de PDF
+grep -v "SCORE_AFTER" "$STATE_FILE" 2>/dev/null > "${STATE_FILE}.tmp" || true
+echo "SCORE_AFTER=$SCORE_AFTER" >> "${STATE_FILE}.tmp"
+mv "${STATE_FILE}.tmp" "$STATE_FILE"
 
 echo "Score anterior: $SCORE_BEFORE"
 echo "Score actual:   $SCORE_AFTER"

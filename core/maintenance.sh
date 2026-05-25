@@ -6,20 +6,7 @@ START_TIME=$(date +%s)
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
 
-# ANSI colors (solo terminal interactiva)
-if [[ -t 1 ]]; then
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    RED='\033[0;31m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
-else
-    GREEN=''
-    YELLOW=''
-    RED=''
-    BLUE=''
-    NC=''
-fi
+# Colors are inherited from core/utils.sh
 
 echo ""
 echo "========================================"
@@ -492,6 +479,8 @@ APP_INDEX=1
 APP_LIST=()
 DUPLICATE_BROWSERS=0
 
+log "🔍 Escaneando aplicaciones instaladas (esto puede tomar unos segundos)..."
+
 while IFS= read -r app; do
 
     [[ -z "$app" ]] && continue
@@ -867,8 +856,6 @@ else
 fi
 
 # Guardar para reporte
-STATE_FILE="$BASE_DIR/logs/state.env"
-mkdir -p "$BASE_DIR/logs"
 
 grep -v "TOTAL_FREED_MB\|FILES_REMOVED" "$STATE_FILE" 2>/dev/null > "${STATE_FILE}.tmp" || true
 
