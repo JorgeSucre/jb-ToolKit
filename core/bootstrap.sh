@@ -63,8 +63,15 @@ else
 fi
 
 INSTALL_BROWSER="false"
-INSTALL_BETTERDISPLAY="false"
 INSTALL_LOGI_OPTIONS="false"
+INSTALL_OFFICE="false"
+INSTALL_COMMUNICATION_APPS="false"
+INSTALL_AI_APPS="false"
+INSTALL_DEV_TOOLS="false"
+INSTALL_ANDROID_TOOLS="false"
+INSTALL_MEDIA_TOOLS="false"
+INSTALL_MONITORING_TOOLS="false"
+INSTALL_CONNECTIVITY_TOOLS="false"
 
 BREW_OK=0
 
@@ -82,14 +89,40 @@ update_brew_indexes
 
 print_section "🧩 Aplicaciones opcionales"
 
-if ask_yes_no "¿Instalar navegador alternativo (Floorp)?"; then
-    INSTALL_BROWSER="true"
+if ask_yes_no "¿Instalar herramientas de desarrollo (Node.js, pnpm, VS Code, Codex, Antigravity)?"; then
+    INSTALL_DEV_TOOLS="true"
 fi
 
-if [[ "$(uname -m)" == "arm64" ]] && \
-   ask_yes_no "¿Instalar BetterDisplay para monitores externos?"; then
+if ask_yes_no "¿Instalar herramientas Android y Java (ADB, Fastboot, OpenJDK)?"; then
+    INSTALL_ANDROID_TOOLS="true"
+fi
 
-    INSTALL_BETTERDISPLAY="true"
+if ask_yes_no "¿Instalar Microsoft Office y OneDrive?"; then
+    INSTALL_OFFICE="true"
+fi
+
+if ask_yes_no "¿Instalar apps de AI (ChatGPT)?"; then
+    INSTALL_AI_APPS="true"
+fi
+
+if ask_yes_no "¿Instalar apps de comunicación (Discord)?"; then
+    INSTALL_COMMUNICATION_APPS="true"
+fi
+
+if ask_yes_no "¿Instalar herramientas multimedia (Kdenlive, GIMP)?"; then
+    INSTALL_MEDIA_TOOLS="true"
+fi
+
+if ask_yes_no "¿Instalar herramientas de monitoreo y sistema (BetterDisplay, Macs Fan Control, AlDente)?"; then
+    INSTALL_MONITORING_TOOLS="true"
+fi
+
+if ask_yes_no "¿Instalar herramientas de conectividad (Tailscale)?"; then
+    INSTALL_CONNECTIVITY_TOOLS="true"
+fi
+
+if ask_yes_no "¿Instalar navegador alternativo (Floorp)?"; then
+    INSTALL_BROWSER="true"
 fi
 
 if ask_yes_no "¿Instalar Logi Options+ para periféricos Logitech?"; then
@@ -110,12 +143,50 @@ if brew_available; then
         sed -i '' '/floorp/d' "$TEMP_BREWFILE"
     fi
 
-    if [[ "$INSTALL_BETTERDISPLAY" != "true" ]]; then
-        sed -i '' '/betterdisplay/d' "$TEMP_BREWFILE"
-    fi
-
     if [[ "$INSTALL_LOGI_OPTIONS" != "true" ]]; then
         sed -i '' '/logi-options+/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_OFFICE" != "true" ]]; then
+        sed -i '' '/microsoft-word/d' "$TEMP_BREWFILE"
+        sed -i '' '/microsoft-excel/d' "$TEMP_BREWFILE"
+        sed -i '' '/onedrive/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_AI_APPS" != "true" ]]; then
+        sed -i '' '/chatgpt/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_COMMUNICATION_APPS" != "true" ]]; then
+        sed -i '' '/discord/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_DEV_TOOLS" != "true" ]]; then
+        sed -i '' '/node/d' "$TEMP_BREWFILE"
+        sed -i '' '/pnpm/d' "$TEMP_BREWFILE"
+        sed -i '' '/visual-studio-code/d' "$TEMP_BREWFILE"
+        sed -i '' '/codex/d' "$TEMP_BREWFILE"
+        sed -i '' '/antigravity/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_ANDROID_TOOLS" != "true" ]]; then
+        sed -i '' '/openjdk/d' "$TEMP_BREWFILE"
+        sed -i '' '/android-platform-tools/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_MEDIA_TOOLS" != "true" ]]; then
+        sed -i '' '/kdenlive/d' "$TEMP_BREWFILE"
+        sed -i '' '/gimp/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_MONITORING_TOOLS" != "true" ]]; then
+        sed -i '' '/betterdisplay/d' "$TEMP_BREWFILE"
+        sed -i '' '/macs-fan-control/d' "$TEMP_BREWFILE"
+        sed -i '' '/aldente/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_CONNECTIVITY_TOOLS" != "true" ]]; then
+        sed -i '' '/tailscale-app/d' "$TEMP_BREWFILE"
     fi
 
     EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)

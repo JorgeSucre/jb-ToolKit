@@ -11,6 +11,41 @@ brew "fastfetch"
 # =========================
 # Optional Apps
 # =========================
-cask "floorp"
+
+# Productivity
+cask "microsoft-word"
+cask "microsoft-excel"
+cask "onedrive"
+
+# Development
+brew "node"
+brew "pnpm"
+cask "visual-studio-code"
+cask "codex"
+cask "antigravity"
+
+# Android / Java
+brew "openjdk"
+cask "android-platform-tools"
+
+# Monitoring / System
 cask "betterdisplay"
+cask "macs-fan-control"
+cask "aldente"
+
+# Utilities / Connectivity
+cask "tailscale-app"
+
+# AI
+cask "chatgpt"
+
+# Communication
+cask "discord"
+
+# Creative / Media
+cask "kdenlive"
+cask "gimp"
+
+# Browsers / Utilities
+cask "floorp"
 cask "logi-options+"
