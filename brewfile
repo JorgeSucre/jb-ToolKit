@@ -1,29 +1,16 @@
 # =========================
-# 🍺 JB Toolkit - Apple Silicon
+# 🍺 JB Toolkit - Brewfile
 # =========================
 
 # =========================
 # CLI / Monitoring
 # =========================
-brew "htop"
-brew "btop"
-brew "ncdu"
-brew "dust"
-brew "mas"
 brew "fastfetch"
-brew "eza"
 
-# =========================
-# Network / Download
-# =========================
-brew "wget"
-
-# =========================
-# Maintenance
-# =========================
-brew "mac-cleanup-go"
 
 # =========================
 # Optional Apps
 # =========================
 cask "floorp"
+cask "betterdisplay"
+cask "logi-options+"

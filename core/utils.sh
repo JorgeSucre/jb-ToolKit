@@ -32,8 +32,6 @@ export GREEN YELLOW RED BLUE NC
 SYS_RAM_PCT=0
 SYS_DISK_PCT=0
 SYS_CPU_LOAD="0%"
-SYS_CACHE_SIZE_MB=0
-SYS_QUARANTINE_COUNT=0
 
 get_cpu_brand_string() {
     local cpu
@@ -42,12 +40,12 @@ get_cpu_brand_string() {
 }
 
 calculate_health_score() {
-    local cpu_load cpu_int ram_pct disk_pct cache_size_mb quarantine_count score=100
+    local cpu_load cpu_int ram_pct disk_pct score=100
 
     # Uso CPU
     cpu_load=$(top -l 1 | awk '/CPU usage/ {printf "%d%%", ($3 + $5)}' 2>/dev/null)
     cpu_load=${cpu_load:-0%}
-    cpu_int=$(echo "$cpu_load" | tr -d '%' | cut -d'.' -f1)
+    cpu_int=$(echo "$cpu_load" | tr -dc '0-9')
     cpu_int=${cpu_int:-0}
 
     # RAM (estimación realista para macOS)
@@ -82,20 +80,6 @@ calculate_health_score() {
     disk_pct=$(df -h / 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
     disk_pct=${disk_pct:-0}
 
-    # Caches
-    cache_size_mb=$(du -sm ~/Library/Caches 2>/dev/null | awk '{print $1}')
-    cache_size_mb=${cache_size_mb:-0}
-
-    # Apps com.apple.quarantine
-    local quarantine_apps
-    quarantine_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null)
-    if [[ -n "$quarantine_apps" ]]; then
-        quarantine_count=$(echo "$quarantine_apps" \
-            | while read -r app; do
-                [[ -n "$app" ]] && xattr -p com.apple.quarantine "$app" &>/dev/null && echo 1
-              done | wc -l | tr -d ' ')
-    fi
-
     # Deducciones de Score
     # RAM
     if [[ "$ram_pct" -gt 85 ]]; then
@@ -118,22 +102,6 @@ calculate_health_score() {
         score=$((score - 5))
     fi
 
-    # Cachés grandes
-    if [[ "$cache_size_mb" -gt 3000 ]]; then
-        score=$((score - 20))
-    elif [[ "$cache_size_mb" -gt 2000 ]]; then
-        score=$((score - 15))
-    elif [[ "$cache_size_mb" -gt 1000 ]]; then
-        score=$((score - 8))
-    fi
-
-    # Quarantine
-    if [[ "$quarantine_count" -gt 15 ]]; then
-        score=$((score - 10))
-    elif [[ "$quarantine_count" -gt 8 ]]; then
-        score=$((score - 5))
-    fi
-
     # Evitar negativos
     if [[ "$score" -lt 0 ]]; then
         score=0
@@ -143,8 +111,6 @@ calculate_health_score() {
     SYS_RAM_PCT=$ram_pct
     SYS_DISK_PCT=$disk_pct
     SYS_CPU_LOAD=$cpu_load
-    SYS_CACHE_SIZE_MB=$cache_size_mb
-    SYS_QUARANTINE_COUNT=$quarantine_count
 
     echo "$score"
 }
@@ -313,132 +279,4 @@ get_device_profile() {
     echo "TYPE=$type"
     echo "BATTERY=$battery"
     echo "FAN=$fan"
-}
-
-# =========================
-# Apps Diagnostics
-# =========================
-
-is_app_executable() {
-    local app_path="$1"
-    local exec_bin
-
-    exec_bin=$(defaults read "$app_path/Contents/Info" CFBundleExecutable 2>/dev/null || true)
-
-    if [[ -z "$exec_bin" ]]; then
-        return 1
-    fi
-
-    if [[ -x "$app_path/Contents/MacOS/$exec_bin" ]]; then
-        return 0
-    fi
-
-    return 1
-}
-
-is_app_32bit() {
-    local app_path="$1"
-    local exec_bin
-
-    exec_bin=$(defaults read "$app_path/Contents/Info" CFBundleExecutable 2>/dev/null || true)
-
-    if [[ -z "$exec_bin" ]]; then
-        return 1
-    fi
-
-    file "$app_path/Contents/MacOS/$exec_bin" 2>/dev/null | grep -qi "Mach-O.*i386"
-}
-
-scan_apps() {
-    if [[ "${ENABLE_APP_SCAN:-false}" != "true" ]]; then
-        return 0
-    fi
-
-    local base_dirs=("/Applications" "$HOME/Applications")
-    local app app_name size last_used last_used_epoch now_epoch diff_days
-    local old_apps=0 broken_apps=0 quarantine_apps=0 heavy_apps=0
-
-    section "Diagnóstico de apps"
-    DRY_RUN_APPS=true
-
-    for dir in "${base_dirs[@]}"; do
-        [[ -d "$dir" ]] || continue
-
-        for app in "$dir"/*.app; do
-            [[ -d "$app" ]] || continue
-
-            app_name=$(basename "$app")
-
-            # Tamaño de app (solo modo verbose por rendimiento)
-            if [[ "${VERBOSE:-false}" == "true" ]]; then
-                size=$(du -sm "$app" 2>/dev/null | awk '{print $1}')
-                size=${size:-0}
-
-                if [[ -n "$size" && "$size" -gt 1024 ]]; then
-                    log "📦 $app_name → app pesada (${size}MB)"
-                    ((heavy_apps++))
-                fi
-            fi
-
-            # Último uso (solo apps usuario / más eficiente)
-            last_used=""
-
-            if [[ "$app" != /System/* ]]; then
-                last_used=$(mdls -raw -name kMDItemLastUsedDate "$app" 2>/dev/null)
-            fi
-
-            if [[ -n "$last_used" && "$last_used" != "(null)" ]]; then
-                last_used_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S %z" "$last_used" "+%s" 2>/dev/null || true)
-                now_epoch=$(date "+%s")
-
-                if [[ -n "$last_used_epoch" ]]; then
-                    diff_days=$(( (now_epoch - last_used_epoch) / 86400 ))
-                    if [[ "$diff_days" -gt 180 ]]; then
-                        log "🧹 $app_name → no usada en $diff_days días"
-                        ((old_apps++))
-                    fi
-                fi
-            else
-                [[ "${VERBOSE:-false}" == "true" ]] && \
-                    log "ℹ️ $app_name → sin registro de uso"
-            fi
-
-            # Quarantine (solo verbose por rendimiento)
-            if [[ "${VERBOSE:-false}" == "true" ]]; then
-                if xattr -p com.apple.quarantine "$app" &>/dev/null; then
-                    log "ℹ️ $app_name → descargada externamente"
-                    ((quarantine_apps++))
-                fi
-            fi
-
-            # Ejecutable roto
-            if ! is_app_executable "$app"; then
-                log "❌ $app_name → ejecutable inválido"
-                ((broken_apps++))
-                continue
-            fi
-
-            # App 32 bits (no compatible)
-            if is_app_32bit "$app"; then
-                log "⚠️ $app_name → posible app 32-bit (no compatible)"
-                continue
-            fi
-
-            # Intento de ejecución controlado
-            if [[ "$DRY_RUN_APPS" != "true" ]]; then
-                if ! open -Ra "$app" >/dev/null 2>&1; then
-                    log "⚠️ $app_name → no se puede abrir"
-                fi
-            else
-                [[ "${VERBOSE:-false}" == "true" ]] && log "ℹ️ $app_name → ejecución omitida"
-            fi
-        done
-    done
-
-    echo ""
-    echo "Resumen de apps:"
-    echo "• Apps abandonadas: $old_apps"
-    echo "• Apps pesadas: $heavy_apps"
-    echo "• Apps quarantine: $quarantine_apps"
-    echo "• Apps rotas: $broken_apps"
 }

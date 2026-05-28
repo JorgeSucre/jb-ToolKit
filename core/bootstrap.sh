@@ -62,7 +62,9 @@ else
     echo "Homebrew requiere acceso sudo en macOS"
 fi
 
-INSTALL_OPTIONAL_APPS="false"
+INSTALL_BROWSER="false"
+INSTALL_BETTERDISPLAY="false"
+INSTALL_LOGI_OPTIONS="false"
 
 BREW_OK=0
 
@@ -73,21 +75,48 @@ else
 fi
 
 configure_brew || true
+BREWFILE="$BASE_DIR/Brewfile"
 
 print_stage "Configurando Homebrew"
 update_brew_indexes
 
-select_brewfile
+print_section "🧩 Aplicaciones opcionales"
 
-if ask_yes_no "¿Instalar navegador alternativo?"; then
-    INSTALL_OPTIONAL_APPS="true"
+if ask_yes_no "¿Instalar navegador alternativo (Floorp)?"; then
+    INSTALL_BROWSER="true"
+fi
+
+if [[ "$(uname -m)" == "arm64" ]] && \
+   ask_yes_no "¿Instalar BetterDisplay para monitores externos?"; then
+
+    INSTALL_BETTERDISPLAY="true"
+fi
+
+if ask_yes_no "¿Instalar Logi Options+ para periféricos Logitech?"; then
+    INSTALL_LOGI_OPTIONS="true"
 fi
 
 print_stage "Sincronizando paquetes"
 
-if brew_available && [[ -f "$BREWFILE" ]]; then
+if brew_available; then
 
     prepare_brewfile
+    if [[ ! -f "$TEMP_BREWFILE" ]]; then
+        error "❌ No se pudo preparar el Brewfile"
+        exit 1
+    fi
+
+    if [[ "$INSTALL_BROWSER" != "true" ]]; then
+        sed -i '' '/floorp/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_BETTERDISPLAY" != "true" ]]; then
+        sed -i '' '/betterdisplay/d' "$TEMP_BREWFILE"
+    fi
+
+    if [[ "$INSTALL_LOGI_OPTIONS" != "true" ]]; then
+        sed -i '' '/logi-options+/d' "$TEMP_BREWFILE"
+    fi
 
     EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
     EXPECTED_CASKS=$(grep '^cask ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
@@ -122,12 +151,11 @@ success "• Entorno base configurado correctamente"
 
 if (( BREW_OK )); then
     success "• Herramientas sincronizadas"
-    success "• Perfil optimizado para este hardware"
 else
     warn "• Homebrew no pudo configurarse automáticamente"
 fi
 
-success "• Optimización aplicada para este hardware"
+success "• Perfil optimizado para este hardware"
 
 cleanup_brewfile
 

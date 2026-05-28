@@ -43,11 +43,22 @@ info() {
 # Headers
 # =========================
 
+UI_CONTEXT="${UI_CONTEXT:-Setup}"
+
+set_ui_context() {
+
+    local context="$1"
+
+    [[ -z "$context" ]] && return 0
+
+    UI_CONTEXT="$context"
+}
+
 print_banner() {
 
     echo ""
     echo "========================================"
-    echo "   🍺 JB Toolkit Setup v0.9"
+    printf "   🍺 JB Toolkit %s v0.9\n" "$UI_CONTEXT"
     echo "========================================"
 }
 
@@ -59,10 +70,20 @@ print_completion() {
     echo "========================================"
 
     if [[ "$success_state" == "true" ]]; then
-        success "✔ Setup completado correctamente"
+        success "✔ ${UI_CONTEXT} completado correctamente"
     else
-        warn "⚠️ Setup completado parcialmente"
+        warn "⚠️ ${UI_CONTEXT} finalizado con advertencias"
     fi
+
+    echo "========================================"
+}
+
+print_cancelled() {
+
+    echo ""
+    echo "========================================"
+
+    info "ℹ️ ${UI_CONTEXT} omitido por el usuario"
 
     echo "========================================"
 }

@@ -176,9 +176,6 @@ prepare_brewfile() {
 
     cp "$BREWFILE" "$TEMP_BREWFILE"
 
-    if [[ "$INSTALL_OPTIONAL_APPS" != "true" ]]; then
-        sed -i '' '/floorp/d' "$TEMP_BREWFILE"
-    fi
 }
 
 sync_brewfile() {

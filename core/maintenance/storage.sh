@@ -7,6 +7,7 @@
 # =========================
 
 LARGE_FILES_FOUND=0
+LARGE_FILES_COUNT=0
 
 # =========================
 # Helpers
@@ -46,30 +47,43 @@ is_excluded_path() {
     return 1
 }
 
-is_relevant_large_file() {
 
-    local file="$1"
 
-    case "$file" in
+# =========================
+# Cached storage scan
+# =========================
 
-        *.iso) return 0 ;;
-        *.dmg) return 0 ;;
-        *.zip) return 0 ;;
-        *.tar) return 0 ;;
-        *.gz) return 0 ;;
-        *.pkg) return 0 ;;
-        *.ipsw) return 0 ;;
-        *.mp4) return 0 ;;
-        *.mov) return 0 ;;
-        *.mkv) return 0 ;;
-        *.utm) return 0 ;;
-        *.pvm) return 0 ;;
-        *.vmdk) return 0 ;;
-        *.qcow2) return 0 ;;
+LARGE_FILES_CACHE=""
 
-    esac
+build_large_files_cache() {
 
-    return 1
+    [[ -n "$LARGE_FILES_CACHE" ]] && return 0
+
+    LARGE_FILES_CACHE=$(find \
+        ~/Downloads \
+        ~/Movies \
+        ~/Desktop \
+        ~/Documents \
+        /Applications \
+        -type f \
+        \( \
+            -iname "*.iso" -o \
+            -iname "*.dmg" -o \
+            -iname "*.zip" -o \
+            -iname "*.tar" -o \
+            -iname "*.gz" -o \
+            -iname "*.pkg" -o \
+            -iname "*.ipsw" -o \
+            -iname "*.mp4" -o \
+            -iname "*.mov" -o \
+            -iname "*.mkv" -o \
+            -iname "*.utm" -o \
+            -iname "*.pvm" -o \
+            -iname "*.vmdk" -o \
+            -iname "*.qcow2" \
+        \) \
+        -size +1024M \
+        2>/dev/null)
 }
 
 # =========================
@@ -119,16 +133,13 @@ scan_large_files() {
     print_section "📦 Revisión de almacenamiento"
 
     local found=0
+    build_large_files_cache
 
     while IFS= read -r file; do
 
         [[ -z "$file" ]] && continue
 
         if is_excluded_path "$file"; then
-            continue
-        fi
-
-        if ! is_relevant_large_file "$file"; then
             continue
         fi
 
@@ -150,6 +161,7 @@ scan_large_files() {
 
         found=1
         LARGE_FILES_FOUND=1
+        LARGE_FILES_COUNT=$((LARGE_FILES_COUNT + 1))
 
         local filename
 
@@ -159,16 +171,12 @@ scan_large_files() {
             "$filename" \
             "$(human_size "$size_mb")"
 
-    done < <(
-        find ~/Downloads \
-            ~/Movies \
-            ~/Desktop \
-            ~/Documents \
-            /Applications \
-            -type f \
-            -size +1024M \
-            2>/dev/null
-    )
+    done <<< "$LARGE_FILES_CACHE"
+
+    if [[ "$found" -eq 1 ]]; then
+        echo ""
+        info "ℹ️ ${LARGE_FILES_COUNT} archivos grandes relevantes detectados"
+    fi
 
     if [[ "$found" -eq 0 ]]; then
         success "✔ No se detectaron archivos grandes relevantes"
@@ -202,7 +210,7 @@ scan_launch_agents() {
         name=$(basename "$plist")
 
         if [[ "$found" -eq 0 ]]; then
-            echo "LaunchAgents detectados:"
+            info "LaunchAgents detectados:"
             echo ""
         fi
 

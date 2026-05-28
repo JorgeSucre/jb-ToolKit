@@ -1,5 +1,3 @@
-
-
 #!/bin/bash
 
 # =========================
@@ -7,6 +5,12 @@
 # =========================
 
 PERFORMANCE_PROFILE="none"
+
+IS_APPLE_SILICON="false"
+
+if [[ "$(uname -m)" == "arm64" ]]; then
+    IS_APPLE_SILICON="true"
+fi
 
 # =========================
 # Light optimization
@@ -19,12 +23,6 @@ apply_light_optimization() {
     PERFORMANCE_PROFILE="light"
 
     log "⚡ Aplicando optimización ligera..."
-
-    if [[ "$(uname -m)" == "arm64" ]]; then
-        info "ℹ️ Perfil optimizado para Apple Silicon"
-    else
-        info "ℹ️ Perfil optimizado para Intel"
-    fi
 
     # Reduce Motion
     defaults write com.apple.universalaccess \
@@ -48,13 +46,7 @@ apply_light_optimization() {
         expose-animation-duration -float 0.1 \
         >/dev/null 2>&1 || true
 
-    # Disable Finder animations
-    defaults write com.apple.finder \
-        DisableAllAnimations -bool true \
-        >/dev/null 2>&1 || true
-
     killall Dock >/dev/null 2>&1 || true
-    killall Finder >/dev/null 2>&1 || true
 
     if [[ "$silent" != "true" ]]; then
         success "✔ Optimización ligera aplicada"
@@ -78,8 +70,8 @@ apply_aggressive_optimization() {
         allowApplePersonalizedAdvertising -bool false \
         >/dev/null 2>&1 || true
 
-    # Siri / assistant optimizations (Intel only)
-    if [[ "$(uname -m)" != "arm64" ]]; then
+    # Siri / assistant optimizations
+    if [[ "$IS_APPLE_SILICON" != "true" ]]; then
 
         defaults write com.apple.assistant.support \
             'Assistant Enabled' -bool false \
@@ -89,11 +81,6 @@ apply_aggressive_optimization() {
             StatusMenuVisible -bool false \
             >/dev/null 2>&1 || true
 
-        launchctl disable gui/$UID/com.apple.tipsd \
-            >/dev/null 2>&1 || true
-
-        launchctl disable gui/$UID/com.apple.assistantd \
-            >/dev/null 2>&1 || true
     fi
 
     # Startup apps cleanup
@@ -117,9 +104,9 @@ EOF
     echo "• Animaciones reducidas"
     echo "• Transparencias reducidas"
     echo "• Apps de inicio optimizadas"
-    echo "• Telemetría no esencial reducida"
+    echo "• Procesos secundarios reducidos"
 
-    info "ℹ️ Se redujeron procesos visuales y telemetría no esencial"
+    info "ℹ️ Se redujeron procesos visuales y apps secundarias de inicio"
 }
 
 # =========================
@@ -147,9 +134,6 @@ restore_performance_defaults() {
     defaults delete com.apple.dock \
         expose-animation-duration >/dev/null 2>&1 || true
 
-    defaults delete com.apple.finder \
-        DisableAllAnimations >/dev/null 2>&1 || true
-
     defaults delete com.apple.AdLib \
         allowApplePersonalizedAdvertising >/dev/null 2>&1 || true
 
@@ -159,14 +143,7 @@ restore_performance_defaults() {
     defaults delete com.apple.Siri \
         StatusMenuVisible >/dev/null 2>&1 || true
 
-    launchctl enable gui/$UID/com.apple.tipsd \
-        >/dev/null 2>&1 || true
-
-    launchctl enable gui/$UID/com.apple.assistantd \
-        >/dev/null 2>&1 || true
-
     killall Dock >/dev/null 2>&1 || true
-    killall Finder >/dev/null 2>&1 || true
 
     success "✔ Configuración por defecto restaurada"
 }
@@ -178,10 +155,9 @@ restore_performance_defaults() {
 run_performance_optimization() {
 
     echo ""
-    echo "⚡ Optimización de rendimiento"
-    echo "----------------------------------------"
+    print_section "⚡ Optimización de rendimiento"
 
-    echo "1) Ligera (recomendado)"
+    echo "1) Ligera (recomendado y seguro)"
     echo "2) Agresiva"
     echo "3) Restaurar valores por defecto"
     echo "0) Omitir"
@@ -201,7 +177,7 @@ run_performance_optimization() {
         2)
             echo ""
 
-            warn "⚠️ Este modo reduce efectos visuales, telemetría y procesos en segundo plano"
+            warn "⚠️ Este modo reduce efectos visuales y algunos procesos en segundo plano"
 
             printf "¿Continuar? (y/n): "
 

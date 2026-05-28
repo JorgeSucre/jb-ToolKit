@@ -21,13 +21,12 @@ initialize_state() {
 
     if [[ -f "$STATE_FILE" ]]; then
 
-        local previous_score
+        source "$STATE_FILE" 2>/dev/null || true
 
-        previous_score=$(grep '^SCORE_BEFORE=' "$STATE_FILE" 2>/dev/null \
-            | cut -d'=' -f2-)
-
-        if [[ -n "$previous_score" ]]; then
-            SCORE_BEFORE="$previous_score"
+        if [[ -n "${SCORE_AFTER:-}" ]]; then
+            SCORE_BEFORE="$SCORE_AFTER"
+        elif [[ -n "${SCORE_BEFORE:-}" ]]; then
+            SCORE_BEFORE="$SCORE_BEFORE"
         fi
     fi
 }
@@ -38,20 +37,13 @@ initialize_state() {
 
 calculate_post_maintenance_score() {
 
-    local health_script="$BASE_DIR/core/health_score.sh"
-
-    if [[ ! -f "$health_script" ]]; then
-        SCORE_AFTER="$SCORE_BEFORE"
-        return
-    fi
-
     local score
 
-    score=$(bash "$health_script" 2>/dev/null \
-        | tail -1 \
+    score=$(calculate_health_score 2>/dev/null \
         | tr -dc '0-9')
 
     if [[ -z "$score" ]]; then
+        warn "⚠️ No se pudo calcular el score posterior"
         SCORE_AFTER="$SCORE_BEFORE"
     else
         SCORE_AFTER="$score"
@@ -65,11 +57,16 @@ calculate_post_maintenance_score() {
 save_maintenance_state() {
 
     mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
+    [[ -z "$SCORE_BEFORE" ]] && SCORE_BEFORE="N/A"
+    [[ -z "$SCORE_AFTER" ]] && SCORE_AFTER="N/A"
+
+    local timestamp
+    timestamp=$(date +%Y-%m-%d_%H:%M:%S)
 
     cat > "$STATE_FILE" <<EOF
 SCORE_BEFORE=$SCORE_BEFORE
 SCORE_AFTER=$SCORE_AFTER
-TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
+TIMESTAMP=$timestamp
 TOTAL_FREED_MB=$TOTAL_FREED_MB
 FILES_REMOVED=$FILES_REMOVED
 PERFORMANCE_PROFILE=$PERFORMANCE_PROFILE
@@ -112,8 +109,17 @@ print_maintenance_summary() {
 
     echo ""
 
-    printf "💾 Espacio recuperado: %sMB\n" "$TOTAL_FREED_MB"
+    if [[ "$TOTAL_FREED_MB" -ge 1024 ]]; then
+        printf "💾 Espacio recuperado: %.1fGB\n" \
+            "$(awk "BEGIN {print $TOTAL_FREED_MB/1024}")"
+    else
+        printf "💾 Espacio recuperado: %sMB\n" "$TOTAL_FREED_MB"
+    fi
     printf "🧹 Elementos eliminados: %s\n" "$FILES_REMOVED"
+
+    if [[ "$PERFORMANCE_PROFILE" != "none" ]]; then
+        printf "⚡ Perfil aplicado: %s\n" "$PERFORMANCE_PROFILE"
+    fi
 
     if [[ "$SCORE_BEFORE" != "N/A" && "$SCORE_AFTER" != "N/A" ]]; then
 

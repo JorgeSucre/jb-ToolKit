@@ -7,7 +7,9 @@ START_TIME=$(date +%s)
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
 
+
 source "$BASE_DIR/core/bootstrap/ui.sh"
+set_ui_context "Maintenance"
 
 source "$BASE_DIR/core/maintenance/cleanup.sh"
 source "$BASE_DIR/core/maintenance/apps.sh"
@@ -34,9 +36,6 @@ if echo "$SPOTLIGHT_STATUS" | grep -qi "Indexing enabled"; then
     success "✔ Spotlight operativo"
 fi
 
-if echo "$SPOTLIGHT_STATUS" | grep -qi "Scanning"; then
-    warn "🔎 Spotlight está reindexando el disco"
-fi
 
 SWAP_USAGE=$(sysctl vm.swapusage 2>/dev/null || true)
 
@@ -47,7 +46,21 @@ else
 fi
 
 
-run_cleanup_tasks || exit 0
+if ! run_cleanup_tasks; then
+    warn "⚠️ Algunas tareas de limpieza fallaron"
+fi
+
+if [[ "${MAINTENANCE_SKIPPED:-false}" == "true" ]]; then
+
+    echo ""
+    info "ℹ️ No se realizaron cambios en el sistema"
+
+    print_elapsed_time "$(( $(date +%s) - START_TIME ))"
+
+    print_completion "true"
+
+    exit 0
+fi
 
 run_storage_analysis
 
