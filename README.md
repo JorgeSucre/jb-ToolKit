@@ -1,232 +1,324 @@
-🍺 JB Toolkit
+# 🍺 JB Toolkit
 
-JB Toolkit es una suite de mantenimiento, diagnóstico y optimización para macOS creada por  jb.repair￼.
+JB Toolkit es una suite de mantenimiento, diagnóstico, optimización y despliegue para macOS desarrollada por JB Repair.
 
-Está diseñada para:
+Diseñada para técnicos, consultores de TI y usuarios avanzados, permite automatizar tareas comunes de soporte, mejorar el rendimiento del sistema y generar documentación técnica de forma rápida y consistente.
 
-* limpiar sistemas macOS
-* automatizar tareas comunes
-* diagnosticar problemas
-* optimizar rendimiento
-* instalar herramientas útiles automáticamente
-* generar reportes técnicos simples
+---
 
-Todo desde una interfaz rápida en Terminal, pensada tanto para técnicos como para usuarios avanzados.
+# ✨ Características
 
-⸻
+## 🔍 Diagnóstico del sistema
 
-✨ Características
+- Análisis de CPU, RAM y almacenamiento
+- Detección de procesos con alto consumo
+- Identificación de archivos grandes
+- Evaluación de salud del sistema
+- Compatibilidad con Intel y Apple Silicon
+- Inventario detallado de hardware
 
-* 🔍 Diagnóstico completo del sistema
-* 🧹 Limpieza automática de cachés y logs
-* ⚡ Optimización de rendimiento macOS
-* 🍺 Integración inteligente con Homebrew
-* 🧠 Detección automática Intel / Apple Silicon
-* 🌡️ Detección de hardware y ventiladores
-* 🔋 Optimización para laptops y desktops
-* 📦 Instalación automática de herramientas esenciales
-* 📄 Exportación de reportes
-* ☁️ Detección de iCloud Drive
-* 🖥️ Interfaz simple y rápida en Terminal
+## 🧹 Mantenimiento y optimización
 
-⸻
+- Limpieza de cachés de usuario y sistema
+- Limpieza de logs
+- Limpieza de Homebrew
+- Eliminación de archivos temporales
+- Optimización de configuraciones de macOS
+- Gestión de elementos de inicio
 
-💻 Requisitos
+## 📄 Reportes profesionales
 
-* macOS Monterey o superior recomendado
-* Conexión a internet
-* Permisos administrativos (recomendado)
-* Terminal.app o iTerm2
+JB Toolkit genera automáticamente:
+
+- Reportes ejecutivos PDF
+- Inventarios completos del sistema
+- Logs de sesión para soporte técnico
+
+Archivos generados:
+
+text logs/session_YYYY-MM-DD_HH-MM-SS.log logs/system_snapshot_YYYY-MM-DD_HH-MM-SS.txt logs/jb_report_YYYY-MM-DD_HH-MM-SS.pdf 
+
+## 🍺 Gestión inteligente de Homebrew
+
+- Instalación automática de Homebrew
+- Compatibilidad Intel y Apple Silicon
+- Detección y reparación de instalaciones incompletas
+- Actualización automática de fórmulas y casks
+- Soporte para versiones antiguas de macOS cuando es posible
+
+## 🧠 Recomendaciones según hardware
+
+JB Toolkit detecta automáticamente el equipo y adapta sus recomendaciones.
+
+Ejemplos:
+
+### MacBook Air
+
+- AlDente
+- ChatGPT
+- Microsoft Office
+- OneDrive
+
+### Mac mini
+
+- BetterDisplay
+- Macs Fan Control
+- Tailscale
+- Herramientas de productividad
+
+### Equipos con pantallas externas
+
+- BetterDisplay
+
+### Equipos compatibles con Android
+
+- Android Platform Tools
+- OpenJDK
+
+---
+
+# 💻 Compatibilidad
 
 Compatible con:
 
-* Intel Macs
-* Apple Silicon (M1/M2/M3/M4)
+- Intel Macs
+- Apple Silicon (M1, M2, M3 y M4)
 
-⸻
+Versiones recomendadas:
 
-▶️ Instalación
+- macOS Monterey
+- macOS Ventura
+- macOS Sonoma
+- macOS Sequoia
+- macOS Tahoe
+
+---
+
+# 📋 Requisitos
+
+- Conexión a internet
+- Terminal.app o iTerm2
+- Permisos administrativos recomendados
+- Al menos 2 GB de espacio libre para operaciones de mantenimiento
+
+---
+
+# 🚀 Instalación
 
 Clona el repositorio:
 
-git clone https://github.com/JorgeSucre/jb-ToolKit.git
+bash git clone https://github.com/JorgeSucre/jb-ToolKit.git 
 
-Entra al directorio:
+Ingresa al directorio:
 
-cd jb-ToolKit
+bash cd jb-ToolKit 
 
-Da permisos de ejecución:
+Otorga permisos de ejecución:
 
-chmod +x jb
-chmod +x core/*.sh
-chmod +x core/bootstrap/*.sh
+bash chmod +x jb chmod +x core/*.sh chmod +x core/bootstrap/*.sh 
 
-⸻
+---
 
-▶️ Cómo ejecutar JB Toolkit
+# ▶️ Uso
 
-La forma correcta de iniciar la herramienta es:
+Inicia siempre la herramienta utilizando el launcher principal:
 
-./jb
+bash ./jb 
 
-o:
+o
 
-bash jb
+bash bash jb 
 
-⸻
+---
 
-⚠️ IMPORTANTE
+# ⚠️ Importante
 
-NO ejecutes directamente:
+No ejecutes módulos individuales directamente:
 
-bootstrap.sh
-maintenance.sh
-diagnostics.sh
+text bootstrap.sh diagnostics.sh maintenance.sh report.sh 
 
-El launcher jb es quien:
+El launcher:
 
-* inicializa correctamente el entorno
-* carga dependencias
-* controla navegación
-* maneja errores
-* mantiene compatibilidad entre módulos
+- Inicializa correctamente el entorno
+- Gestiona dependencias
+- Controla navegación entre módulos
+- Maneja errores
+- Genera logs y snapshots
+- Mantiene compatibilidad entre componentes
 
-⸻
+---
 
-📦 Initial Setup
+# 🛠️ Módulos
 
-La primera ejecución puede:
+## 1. Bootstrap
 
-* instalar Homebrew
-* instalar herramientas CLI
-* descargar dependencias
-* sincronizar paquetes
-* detectar hardware
-* optimizar el sistema
+Configura el sistema automáticamente:
 
-La primera vez puede tardar varios minutos dependiendo de:
+- Homebrew
+- Herramientas esenciales
+- Aplicaciones recomendadas
+- Dependencias técnicas
+- Configuración inicial
 
-* conexión a internet
-* velocidad del Mac
-* arquitectura Intel / Apple Silicon
+Además permite instalar aplicaciones opcionales mediante selección interactiva.
 
-⸻
+---
 
-🛠️ Herramientas incluidas
-
-Algunas herramientas que JB Toolkit puede instalar:
-
-* htop
-* btop
-* ncdu
-* dust
-* fastfetch
-* wget
-* eza
-* mac-cleanup-go
-
-Y opcionalmente:
-
-* navegador alternativo
-* herramientas térmicas
-* utilidades de batería
-
-⸻
-
-🔧 Funciones principales
-
-1. Initial Setup
-
-Configura automáticamente:
-
-* Homebrew
-* herramientas esenciales
-* perfiles hardware
-* optimizaciones base
-
-⸻
-
-2. Diagnostics
+## 2. Diagnostics
 
 Analiza:
 
-* CPU
-* RAM
-* disco
-* procesos
-* temperatura
-* salud del sistema
-* aplicaciones pesadas
-* archivos grandes
+- CPU
+- RAM
+- Almacenamiento
+- Red
+- Procesos
+- Estado general del sistema
+- Hardware instalado
 
-⸻
+Genera un Health Score para facilitar la evaluación rápida del equipo.
 
-3. Maintenance
+---
+
+## 3. Maintenance
 
 Realiza:
 
-* limpieza de cachés
-* limpieza de logs
-* limpieza Homebrew
-* optimización de rendimiento
-* detección de archivos innecesarios
-* optimizaciones visuales macOS
+- Limpieza de cachés
+- Limpieza de logs
+- Limpieza Homebrew
+- Optimización de configuraciones
+- Recuperación de espacio en disco
 
-⸻
+Todas las acciones quedan registradas para futuras referencias.
 
-4. Report
+---
 
-Genera reportes exportables del estado del sistema.
+## 4. Report
 
-⸻
+Genera un reporte ejecutivo en PDF con:
 
-⚡ Optimización de rendimiento
+- Información del sistema
+- Estado de salud
+- Resultados de mantenimiento
+- Resumen ejecutivo
+- Inventario técnico
 
-Maintenance incluye perfiles de optimización:
+Ideal para entregar a clientes después de un servicio de mantenimiento.
 
-1) Ligera (recomendado)
-2) Agresiva
-3) Restaurar valores por defecto
+---
 
-Puede:
+# 📦 Aplicaciones compatibles
 
-* reducir animaciones
-* reducir transparencias
-* optimizar apps de inicio
-* reducir procesos no esenciales
-* minimizar telemetría
+Dependiendo del hardware y las preferencias del usuario, JB Toolkit puede instalar o actualizar:
 
-⸻
+### Productividad
 
-🧪 Estado actual del proyecto
+- Microsoft Word
+- Microsoft Excel
+- OneDrive
 
-JB Toolkit continúa en desarrollo activo.
+### Desarrollo
 
-Objetivos futuros:
+- Visual Studio Code
+- Codex
+- Antigravity
+- Node.js
+- PNPM
 
-* mejor reporting
-* soporte extendido Apple Silicon
-* automatización avanzada
-* exportación PDF
-* perfiles técnicos avanzados
-* sistema de plugins
+### Inteligencia Artificial
 
-⸻
+- ChatGPT
 
-👨‍💻 Autor
+### Android
 
-Desarrollado por  jb.repair￼
+- Android Platform Tools
+- OpenJDK
+
+### Comunicación
+
+- Discord
+
+### Multimedia
+
+- Kdenlive
+- GIMP
+
+### Utilidades
+
+- Tailscale
+- BetterDisplay
+- AlDente
+- Macs Fan Control
+- Logi Options+
+
+### Navegadores
+
+- Floorp
+
+---
+
+# 📁 Estructura de artefactos
+
+## Session Log
+
+Registro detallado de la ejecución del toolkit.
+
+text logs/session_*.log 
+
+## System Snapshot
+
+Inventario completo del sistema.
+
+text logs/system_snapshot_*.txt 
+
+Incluye:
+
+- Hardware
+- CPU
+- RAM
+- Almacenamiento
+- Interfaces de red
+- Pantallas conectadas
+- Homebrew
+- Fastfetch
+
+## Executive PDF
+
+Reporte orientado al cliente.
+
+text logs/jb_report_*.pdf 
+
+---
+
+# 🔮 Roadmap
+
+Próximas mejoras:
+
+- Validación ampliada en Ventura Intel
+- Más perfiles de hardware
+- Soporte para plugins
+- Integraciones remotas
+- Reportes avanzados
+- Automatización adicional para soporte técnico
+
+---
+
+# 👨‍💻 Autor
+
+Desarrollado por JB Repair.
 
 Especialistas en:
 
-* reparación Apple
-* optimización macOS
-* soporte técnico
-* infraestructura
-* automatización
+- Reparación Apple
+- Optimización macOS
+- Redes y conectividad
+- Starlink
+- Automatización
+- Infraestructura tecnológica
 
-⸻
+---
 
-📄 Licencia
+# 📄 Licencia
 
-MIT License.
+MIT Lice
