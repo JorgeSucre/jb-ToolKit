@@ -3,6 +3,12 @@
 set -Eeuo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$BASE_DIR/core/utils.sh"
+
+
+init_session
+set_session_module "Launcher"
+install_session_traps
 
 # asegurar permisos
 chmod +x "$BASE_DIR/core/"*.sh 2>/dev/null || true
@@ -10,13 +16,22 @@ chmod +x "$BASE_DIR/core/"*.sh 2>/dev/null || true
 run_script() {
     local label="$1"
     local script="$2"
+    local exit_code
 
     echo "$label"
     echo ""
 
     if [[ -f "$script" ]]; then
-        bash "$script" || echo "❌ Error ejecutando $(basename "$script")"
+        session_write INFO "Launching $(basename "$script")"
+        if bash "$script"; then
+            session_write EXIT "$(basename "$script") completed with exit code 0"
+        else
+            exit_code=$?
+            session_write ERROR "$(basename "$script") failed with exit code $exit_code"
+            echo "❌ Error ejecutando $(basename "$script")"
+        fi
     else
+        session_write ERROR "Script not found: $script"
         echo "❌ $(basename "$script") no encontrado"
     fi
 }
@@ -67,28 +82,7 @@ while true; do
             pause
             ;;
         4)
-            echo "📊 Generando reporte..."
-            echo ""
-            if [[ -f "$BASE_DIR/core/report.sh" ]]; then
-                bash "$BASE_DIR/core/report.sh" || echo "❌ Error en reporte"
-
-                echo ""
-                read -r -p "¿Generar PDF también? (y/n): " pdfopt
-                if [[ "$pdfopt" =~ ^[YySs]$ ]]; then
-                    if ! python3 -c "import reportlab" &>/dev/null; then
-                        echo "📦 Instalando reportlab..."
-                        python3 -m pip install --user reportlab --quiet || {
-                            echo "❌ No se pudo instalar reportlab"
-                        }
-                    fi
-
-                    if python3 -c "import reportlab" &>/dev/null; then
-                        python3 "$BASE_DIR/core/report_pdf.py" || echo "❌ Error generando PDF"
-                    fi
-                fi
-            else
-                echo "❌ report.sh no encontrado"
-            fi
+            run_script "📊 Generando reporte..." "$BASE_DIR/core/report.sh"
             pause
             ;;
         5)

@@ -1,5 +1,44 @@
+# Runtime artifacts
 logs/
 reports/
 *.log
-.DS_Store
+*.tmp
+*.bak
+
+# Toolkit state
 state.env
+core/state.env
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.venv/
+venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+
+# Temporary development files
+task.md
+walkthrough.md
+ARCHITECTURAL_AUDIT.md
+
+# Generated reports
+logs/*.pdf
+reports/*.pdf
+
+# Windows
+Thumbs.db
+
+# Skills
+.codex/

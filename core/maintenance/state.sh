@@ -19,16 +19,9 @@ initialize_state() {
     SCORE_BEFORE="N/A"
     SCORE_AFTER="N/A"
 
-    if [[ -f "$STATE_FILE" ]]; then
-
-        source "$STATE_FILE" 2>/dev/null || true
-
-        if [[ -n "${SCORE_AFTER:-}" ]]; then
-            SCORE_BEFORE="$SCORE_AFTER"
-        elif [[ -n "${SCORE_BEFORE:-}" ]]; then
-            SCORE_BEFORE="$SCORE_BEFORE"
-        fi
-    fi
+    local previous_score
+    previous_score="$(state_value SCORE_AFTER)"
+    [[ "$previous_score" != "N/A" ]] && SCORE_BEFORE="$previous_score"
 }
 
 # =========================
@@ -63,18 +56,18 @@ save_maintenance_state() {
     local timestamp
     timestamp=$(date +%Y-%m-%d_%H:%M:%S)
 
-    cat > "$STATE_FILE" <<EOF
-SCORE_BEFORE=$SCORE_BEFORE
-SCORE_AFTER=$SCORE_AFTER
-TIMESTAMP=$timestamp
-TOTAL_FREED_MB=$TOTAL_FREED_MB
-FILES_REMOVED=$FILES_REMOVED
-PERFORMANCE_PROFILE=$PERFORMANCE_PROFILE
-LAST_MODULE=maintenance
-LAST_DURATION=${ELAPSED:-0}
-ARCH=$(uname -m)
-JB_VERSION=0.9
-EOF
+    write_state_values \
+        "SCORE_BEFORE=$SCORE_BEFORE" \
+        "SCORE_AFTER=$SCORE_AFTER" \
+        "TIMESTAMP=$timestamp" \
+        "LAST_MAINTENANCE=$timestamp" \
+        "TOTAL_FREED_MB=$TOTAL_FREED_MB" \
+        "FILES_REMOVED=$FILES_REMOVED" \
+        "PERFORMANCE_PROFILE=$PERFORMANCE_PROFILE" \
+        "LAST_MODULE=maintenance" \
+        "LAST_DURATION=${ELAPSED:-0}" \
+        "ARCH=$(uname -m)" \
+        "JB_VERSION=0.9"
 
     log "📁 Estado guardado correctamente"
 }

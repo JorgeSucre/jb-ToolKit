@@ -6,6 +6,11 @@ START_TIME=$(date +%s)
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
+# Session is owned by the jb launcher.
+# Only initialize a fallback session when run standalone (outside jb).
+
+
+init_session
 
 
 source "$BASE_DIR/core/bootstrap/ui.sh"
@@ -46,6 +51,7 @@ else
 fi
 
 
+session_write INFO "Running cleanup.sh"
 if ! run_cleanup_tasks; then
     warn "⚠️ Algunas tareas de limpieza fallaron"
 fi
@@ -62,12 +68,16 @@ if [[ "${MAINTENANCE_SKIPPED:-false}" == "true" ]]; then
     exit 0
 fi
 
+session_write INFO "Running storage.sh"
 run_storage_analysis
 
+session_write INFO "Running apps.sh"
 run_apps_cleanup
 
+session_write INFO "Running performance.sh"
 run_performance_optimization
 
+session_write INFO "Updating maintenance state"
 calculate_post_maintenance_score
 
 END_TIME=$(date +%s)

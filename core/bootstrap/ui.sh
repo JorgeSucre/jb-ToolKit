@@ -25,18 +25,26 @@ print_section() {
 
 success() {
     printf "${GREEN}%s${NC}\n" "$1"
+    session_write SUCCESS "$1"
 }
 
 warn() {
     printf "${YELLOW}%s${NC}\n" "$1"
+    session_write WARNING "$1"
 }
 
 error_msg() {
     printf "${RED}%s${NC}\n" "$1"
+    session_write ERROR "$1"
+}
+
+error() {
+    error_msg "$1"
 }
 
 info() {
     printf "${BLUE}%s${NC}\n" "$1"
+    session_write INFO "$1"
 }
 
 # =========================
@@ -52,6 +60,7 @@ set_ui_context() {
     [[ -z "$context" ]] && return 0
 
     UI_CONTEXT="$context"
+    set_session_module "$context"
 }
 
 print_banner() {

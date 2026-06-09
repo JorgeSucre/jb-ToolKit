@@ -4,6 +4,11 @@ set -Eeo pipefail
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
+# Session is owned by the jb launcher.
+# Only initialize a fallback session when run standalone (outside jb).
+
+
+init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 set_ui_context "Diagnostics"
 
@@ -161,18 +166,18 @@ fi
 
 printf "Estado actual: ${SCORE_COLOR}%s %s/100${NC} (%s)\n" "$SCORE_BAR" "$SCORE" "$SCORE_STATUS"
 
-# Guardar estado
-cat > "$STATE_FILE" <<EOF
-SCORE_BEFORE=$SCORE
-SCORE_AFTER=$SCORE
-TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
-LAST_MODULE=diagnostics
-ARCH=$(uname -m)
-JB_VERSION=0.9
-TOTAL_FREED_MB=0
-FILES_REMOVED=0
-PERFORMANCE_PROFILE=none
-EOF
+# Guardar solo métricas de diagnóstico; preservar resultados de mantenimiento.
+write_state_values \
+    "SCORE_BEFORE=$SCORE" \
+    "SCORE_AFTER=$SCORE" \
+    "TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)" \
+    "LAST_DIAGNOSTIC=$(date +%Y-%m-%d_%H:%M:%S)" \
+    "LAST_MODULE=diagnostics" \
+    "ARCH=$(uname -m)" \
+    "JB_VERSION=0.9" \
+    "CPU_LOAD=$SYS_CPU_LOAD" \
+    "RAM_USED_PCT=$SYS_RAM_PCT" \
+    "DISK_USED_PCT=$SYS_DISK_PCT"
 
 info "📁 Estado del diagnóstico guardado correctamente"
 echo ""

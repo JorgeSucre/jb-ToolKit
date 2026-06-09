@@ -25,7 +25,7 @@ MAINTENANCE_SKIPPED="false"
 
 has_homebrew_cleanup_candidates() {
 
-    command -v brew >/dev/null 2>&1 || return 1
+    brew_available || return 1
 
     brew cleanup -n 2>/dev/null \
         | grep -q .
@@ -114,7 +114,7 @@ preview_cleanup() {
 
 cleanup_homebrew() {
 
-    command -v brew >/dev/null 2>&1 || return 0
+    brew_available || return 0
     [[ ! -d ~/Library/Caches/Homebrew ]] && return 0
 
     print_section "📦 Homebrew"
@@ -131,7 +131,7 @@ cleanup_homebrew() {
 
     log "🧹 Limpiando paquetes y cachés Homebrew..."
 
-    brew cleanup -s >/dev/null 2>&1 || true
+    run_cmd brew cleanup -s || warn "⚠️ Homebrew cleanup no pudo completarse"
 
     after_size=$(safe_dir_size_mb ~/Library/Caches/Homebrew)
 

@@ -6,6 +6,240 @@
 
 EXTRA_PACKAGES=""
 TOOLKIT_OUTDATED=""
+SELECTED_PACKAGES=""
+
+OPTIONAL_PACKAGE_IDS=(
+    "microsoft-word" "microsoft-excel" "onedrive" "visual-studio-code"
+    "codex" "antigravity" "chatgpt" "discord" "kdenlive" "gimp"
+    "floorp" "logi-options+" "tailscale-app" "android-platform-tools" "openjdk"
+)
+OPTIONAL_PACKAGE_LABELS=(
+    "Microsoft Word" "Microsoft Excel" "OneDrive" "VS Code"
+    "Codex" "Antigravity" "ChatGPT" "Discord" "Kdenlive" "GIMP"
+    "Floorp" "Logi Options+" "Tailscale" "Android Platform Tools" "OpenJDK"
+)
+
+package_selected() {
+    local package="$1"
+    grep -qx "$package" <<< "$SELECTED_PACKAGES"
+}
+
+add_selected_package() {
+    local package="$1"
+    if ! package_selected "$package"; then
+        SELECTED_PACKAGES+="$package"$'\n'
+        session_write INFO "Selected package: $package"
+    fi
+}
+
+parse_package_selection() {
+    local selection="$1"
+    local max="$2"
+    local item
+
+    selection="${selection// /}"
+    [[ -z "$selection" || "$selection" == "0" || "$selection" == "none" ]] && return 0
+
+    if [[ "$selection" == "a" || "$selection" == "all" ]]; then
+        for ((item=0; item<max; item++)); do
+            add_selected_package "${OPTIONAL_PACKAGE_IDS[$item]}"
+        done
+        return 0
+    fi
+
+    IFS=',' read -ra choices <<< "$selection"
+    for item in "${choices[@]}"; do
+        if [[ "$item" =~ ^[0-9]+$ ]] && (( item >= 1 && item <= max )); then
+            add_selected_package "${OPTIONAL_PACKAGE_IDS[$((item - 1))]}"
+        else
+            warn "⚠️ Selección ignorada: $item"
+        fi
+    done
+}
+
+select_optional_packages() {
+    local index selection
+
+    print_section "🧩 Aplicaciones opcionales"
+    if ! ask_yes_no "¿Deseas revisar aplicaciones opcionales adicionales?"; then
+        info "ℹ️ Aplicaciones opcionales omitidas"
+        return 0
+    fi
+
+    echo ""
+    for ((index=0; index<${#OPTIONAL_PACKAGE_IDS[@]}; index++)); do
+        printf "[%s] %s\n" "$((index + 1))" "${OPTIONAL_PACKAGE_LABELS[$index]}"
+    done
+    echo ""
+    echo "[a] Instalar todas"
+    echo "[0] No instalar ninguna"
+    printf "Selecciona una o varias opciones (ej: 1,4,7): "
+    read -r selection
+
+    parse_package_selection "$selection" "${#OPTIONAL_PACKAGE_IDS[@]}"
+}
+
+package_install_state() {
+    local package="$1"
+
+    if brew list --formula "$package" >/dev/null 2>&1; then
+        if brew outdated --formula "$package" 2>/dev/null | grep -Fxq "$package"; then
+            printf "update\n"
+        else
+            printf "installed\n"
+        fi
+        return 0
+    fi
+
+    if brew list --cask "$package" >/dev/null 2>&1; then
+        if brew outdated --cask "$package" 2>/dev/null | grep -Fxq "$package"; then
+            printf "update\n"
+        else
+            printf "installed\n"
+        fi
+        return 0
+    fi
+
+    printf "not_installed\n"
+}
+
+offer_hardware_recommendations() {
+    local recommended_ids=()
+    local recommended_labels=()
+    local selectable_ids=()
+    local selectable_labels=()
+    local index selection package state label
+
+    detect_machine_family
+
+    case "$MACHINE_FAMILY" in
+        macbook_air)
+            recommended_ids=("aldente")
+            recommended_labels=("AlDente")
+            if has_external_display; then
+                recommended_ids+=("betterdisplay")
+                recommended_labels+=("BetterDisplay")
+            fi
+            ;;
+        macbook_pro)
+            recommended_ids=("aldente" "macs-fan-control")
+            recommended_labels=("AlDente" "Macs Fan Control")
+            if has_external_display; then
+                recommended_ids+=("betterdisplay")
+                recommended_labels+=("BetterDisplay")
+            fi
+            ;;
+        mac_mini|mac_studio)
+            recommended_ids=("macs-fan-control" "betterdisplay")
+            recommended_labels=("Macs Fan Control" "BetterDisplay")
+            ;;
+        imac)
+            recommended_ids=("macs-fan-control")
+            recommended_labels=("Macs Fan Control")
+            if has_external_display; then
+                recommended_ids+=("betterdisplay")
+                recommended_labels+=("BetterDisplay")
+            fi
+            ;;
+        *) return 0 ;;
+    esac
+
+    print_section "🧠 Recomendaciones para este Mac"
+    for ((index=0; index<${#recommended_ids[@]}; index++)); do
+        package="${recommended_ids[$index]}"
+        label="${recommended_labels[$index]}"
+        state=$(package_install_state "$package" 2>/dev/null || true)
+        case "$state" in
+            installed)
+                success "✔ $label ya instalado y actualizado"
+                ;;
+            update)
+                selectable_ids+=("$package")
+                selectable_labels+=("Actualizar $label")
+                ;;
+            not_installed)
+                selectable_ids+=("$package")
+                selectable_labels+=("Instalar $label")
+                ;;
+            *)
+                warn "⚠️ No se pudo determinar el estado de $label"
+                ;;
+        esac
+    done
+
+    if [[ "${#selectable_ids[@]}" -eq 0 ]]; then
+        info "ℹ️ No hay recomendaciones pendientes"
+        return 0
+    fi
+
+    echo ""
+    for ((index=0; index<${#selectable_ids[@]}; index++)); do
+        printf "[%s] %s\n" "$((index + 1))" "${selectable_labels[$index]}"
+    done
+    echo "[a] Aplicar todas las recomendaciones"
+    echo "[0] Omitir"
+    printf "Selecciona recomendaciones (ej: 1,2): "
+    read -r selection
+
+    selection="${selection// /}"
+    if [[ "$selection" == "a" || "$selection" == "all" ]]; then
+        for package in "${selectable_ids[@]}"; do
+            add_selected_package "$package"
+            success "✔ $package seleccionado"
+        done
+    elif [[ -n "$selection" && "$selection" != "0" ]]; then
+        IFS=',' read -ra choices <<< "$selection"
+        for index in "${choices[@]}"; do
+            if [[ "$index" =~ ^[0-9]+$ ]] && (( index >= 1 && index <= ${#selectable_ids[@]} )); then
+                package="${selectable_ids[$((index - 1))]}"
+                add_selected_package "$package"
+                success "✔ $package seleccionado"
+            else
+                warn "⚠️ Selección ignorada: $index"
+            fi
+        done
+    fi
+}
+
+filter_brewfile_to_selection() {
+    local output="${TEMP_BREWFILE}.selected"
+    local line package
+
+    [[ -f "$TEMP_BREWFILE" ]] || {
+        error_msg "❌ No existe el Brewfile temporal"
+        return 1
+    }
+
+    : > "$output"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^(brew|cask)[[:space:]]+\"([^\"]+)\" ]]; then
+            package="${BASH_REMATCH[2]}"
+            if [[ "$package" == "fastfetch" ]] || package_selected "$package"; then
+                printf "%s\n" "$line" >> "$output"
+            fi
+        else
+            printf "%s\n" "$line" >> "$output"
+        fi
+    done < "$TEMP_BREWFILE"
+
+    mv "$output" "$TEMP_BREWFILE"
+
+    if ! awk -F'"' '$2 == "fastfetch" && $1 ~ /^brew / {found=1} END {exit !found}' \
+        "$TEMP_BREWFILE"; then
+        error_msg "❌ El Brewfile temporal perdió fastfetch"
+        return 1
+    fi
+
+    while IFS= read -r package; do
+        [[ -z "$package" ]] && continue
+        if ! awk -F'"' -v package="$package" \
+            '$2 == package && ($1 ~ /^brew / || $1 ~ /^cask /) {found=1} END {exit !found}' \
+            "$TEMP_BREWFILE"; then
+            error_msg "❌ El paquete seleccionado no existe en el Brewfile: $package"
+            return 1
+        fi
+    done <<< "$SELECTED_PACKAGES"
+}
 
 # =========================
 # External packages
@@ -29,6 +263,8 @@ append_external_packages() {
 }
 
 build_external_package_list() {
+
+    EXTRA_PACKAGES=""
 
     append_external_packages \
         "$INSTALLED_BREW" \
@@ -96,7 +332,9 @@ update_external_packages() {
 
     log "⬆️ Actualizando paquetes externos..."
 
-    OUTDATED_EXTERNAL=$(brew outdated 2>/dev/null || true)
+    OUTDATED_EXTERNAL=$(brew outdated --formula 2>/dev/null || true)
+    OUTDATED_EXTERNAL+=$'\n'
+    OUTDATED_EXTERNAL+=$(brew outdated --cask 2>/dev/null || true)
 
     if [[ -z "$OUTDATED_EXTERNAL" ]]; then
         success "✔ No había paquetes externos pendientes"
@@ -109,9 +347,16 @@ update_external_packages() {
 
         pkg_name=$(awk '{print $1}' <<< "$pkg")
 
+        if ! grep -Fqx "brew:${pkg_name}" <<< "$EXTRA_PACKAGES" \
+            && ! grep -Fqx "cask:${pkg_name}" <<< "$EXTRA_PACKAGES"; then
+            continue
+        fi
+
         echo "   • $pkg_name"
 
-        HOMEBREW_NO_ENV_HINTS=1 brew upgrade "$pkg_name" >/dev/null 2>&1 || true
+        if ! HOMEBREW_NO_ENV_HINTS=1 run_cmd brew upgrade "$pkg_name"; then
+            warn "⚠️ No se pudo actualizar $pkg_name"
+        fi
 
     done <<< "$OUTDATED_EXTERNAL"
 
@@ -139,6 +384,8 @@ append_outdated() {
 }
 
 build_outdated_package_list() {
+
+    TOOLKIT_OUTDATED=""
 
     OUTDATED_FORMULAS=$(brew outdated --formula 2>/dev/null || true)
     OUTDATED_CASKS=$(brew outdated --cask 2>/dev/null || true)
@@ -195,11 +442,13 @@ update_toolkit_packages() {
 
         echo "   • $pkg_name"
 
-        HOMEBREW_NO_ENV_HINTS=1 brew upgrade "$pkg_name" >/dev/null 2>&1 || true
+        if ! HOMEBREW_NO_ENV_HINTS=1 run_cmd brew upgrade "$pkg_name"; then
+            warn "⚠️ No se pudo actualizar $pkg_name"
+        fi
 
     done <<< "$TOOLKIT_OUTDATED"
 
-    brew cleanup -s >/dev/null 2>&1 || true
+    run_cmd brew cleanup -s || warn "⚠️ Homebrew cleanup no pudo completarse"
 
     echo ""
 

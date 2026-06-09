@@ -50,6 +50,19 @@ load_hardware_profile() {
     done <<< "$PROFILE"
 }
 
+detect_machine_family() {
+    load_hardware_info
+
+    case "$HARDWARE_NAME" in
+        *"MacBook Air"*) MACHINE_FAMILY="macbook_air" ;;
+        *"MacBook Pro"*) MACHINE_FAMILY="macbook_pro" ;;
+        *"Mac mini"*) MACHINE_FAMILY="mac_mini" ;;
+        *"Mac Studio"*) MACHINE_FAMILY="mac_studio" ;;
+        *"iMac"*) MACHINE_FAMILY="imac" ;;
+        *) MACHINE_FAMILY="other" ;;
+    esac
+}
+
 # =========================
 # Hardware info
 # =========================

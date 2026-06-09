@@ -10,28 +10,14 @@ export JB_REPORT_ALREADY_RUN=1
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
+# Session is owned by the jb launcher.
+# Only initialize a fallback session when run standalone (outside jb).
+
+
+init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 
 set_ui_context "Report"
-
-# Helper to retrieve a value from the state file
-state_value() {
-
-    local key="$1"
-    local value=""
-
-    if [[ -f "$STATE_FILE" ]]; then
-        value=$(awk -F= -v key="$key" \
-            '$1 == key {print substr($0, length(key) + 2); exit}' \
-            "$STATE_FILE")
-    fi
-
-    if [[ -n "$value" ]]; then
-        printf "%s\n" "$value"
-    else
-        printf "%s\n" "N/A"
-    fi
-}
 
 # =========================
 # Header
@@ -113,10 +99,17 @@ if [[ -n "$DISK_INFO" ]]; then
 
     DISK_TOTAL=$(echo "$DISK_INFO" | awk '{print $2}')
     DISK_USED=$(echo "$DISK_INFO" | awk '{print $3}')
+    DISK_AVAIL=$(echo "$DISK_INFO" | awk '{print $4}')
     DISK_PERCENT=$(echo "$DISK_INFO" | awk '{print $5}')
 
-    echo "• Capacidad total: ${DISK_TOTAL}"
-    echo "• Espacio utilizado: ${DISK_USED} (${DISK_PERCENT})"
+    DISK_TOTAL_FRIENDLY=$(echo "$DISK_TOTAL" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')
+    DISK_USED_FRIENDLY=$(echo "$DISK_USED" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')
+    DISK_AVAIL_FRIENDLY=$(echo "$DISK_AVAIL" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')
+
+    echo "• Capacidad total: ${DISK_TOTAL_FRIENDLY}"
+    echo "• Espacio utilizado: ${DISK_USED_FRIENDLY}"
+    echo "• Espacio disponible para el usuario: ${DISK_AVAIL_FRIENDLY}"
+    echo "• Uso del disco: ${DISK_PERCENT}"
 
 else
     echo "• Información no disponible"
@@ -144,19 +137,12 @@ section "Resultados"
 
 SCORE_BEFORE="$(state_value SCORE_BEFORE)"
 
-SCORE_AFTER=$(calculate_health_score \
-    | tail -1 \
-    | tr -dc '0-9')
-
-# Guardar SCORE_AFTER en state.env para el generador de PDF
-grep -v "^SCORE_AFTER=" "$STATE_FILE" 2>/dev/null > "${STATE_FILE}.tmp" || true
-echo "SCORE_AFTER=$SCORE_AFTER" >> "${STATE_FILE}.tmp"
-mv "${STATE_FILE}.tmp" "$STATE_FILE"
+SCORE_AFTER="$(state_value SCORE_AFTER)"
 
 echo "Score anterior: $SCORE_BEFORE"
 echo "Score actual:   $SCORE_AFTER"
 
-if [[ "$SCORE_BEFORE" != "N/A" ]]; then
+if [[ "$SCORE_BEFORE" =~ ^[0-9]+$ && "$SCORE_AFTER" =~ ^[0-9]+$ ]]; then
     DIFF=$((SCORE_AFTER - SCORE_BEFORE))
 
     if [[ "$DIFF" -gt 0 ]]; then
@@ -185,12 +171,14 @@ FILES_REMOVED_STATE="$(state_value FILES_REMOVED)"
 PERFORMANCE_PROFILE_STATE="$(state_value PERFORMANCE_PROFILE)"
 LAST_MAINTENANCE="$(state_value LAST_MAINTENANCE)"
 
-if [[ "$SCORE_AFTER" -ge 90 ]]; then
+if [[ "$SCORE_AFTER" =~ ^[0-9]+$ && "$SCORE_AFTER" -ge 90 ]]; then
     echo "• Sistema en excelente estado"
-elif [[ "$SCORE_AFTER" -ge 70 ]]; then
+elif [[ "$SCORE_AFTER" =~ ^[0-9]+$ && "$SCORE_AFTER" -ge 70 ]]; then
     echo "• Sistema en estado aceptable"
-else
+elif [[ "$SCORE_AFTER" =~ ^[0-9]+$ ]]; then
     echo "• Sistema requiere atención"
+else
+    echo "• Ejecuta Diagnostics para calcular el estado del sistema"
 fi
 
 
@@ -222,6 +210,57 @@ if [[ "$PERFORMANCE_PROFILE_STATE" != "N/A" && "$PERFORMANCE_PROFILE_STATE" != "
 fi
 
 PDF_GENERATED="false"
+PDF_BASENAME=""
+
+echo ""
+if ask_yes_no "¿Generar PDF ejecutivo también?"; then
+    if ! run_cmd python3 -c "import reportlab"; then
+        info "ℹ️ Instalando dependencia para el reporte PDF"
+        if ! run_cmd python3 -m pip install --user reportlab --quiet; then
+            warn "⚠️ No se pudo instalar reportlab; el PDF se omitirá"
+        fi
+    fi
+
+    if run_cmd python3 -c "import reportlab"; then
+        PDF_BASENAME="jb_report_$(date '+%Y-%m-%d_%H-%M-%S').pdf"
+        export JB_PDF_OUTPUT="$BASE_DIR/logs/$PDF_BASENAME"
+
+        if run_cmd python3 "$BASE_DIR/core/report_pdf.py" \
+            && [[ -f "$JB_PDF_OUTPUT" ]]; then
+            PDF_GENERATED="true"
+            write_state_values "LAST_PDF_REPORT=$PDF_BASENAME"
+            success "✔ PDF ejecutivo generado"
+        else
+            warn "⚠️ No se pudo generar el PDF ejecutivo"
+        fi
+    fi
+fi
+
+SESSION_LOG_STATE="$(state_value LAST_SESSION_LOG)"
+SNAPSHOT_STATE="$(state_value LAST_SYSTEM_SNAPSHOT)"
+
+print_section "📁 Archivos generados"
+
+if [[ "$PDF_GENERATED" == "true" ]]; then
+    success "✔ Reporte PDF: $PDF_BASENAME"
+else
+    info "• Reporte PDF: no generado"
+fi
+
+if [[ "$SNAPSHOT_STATE" != "N/A" && -f "$BASE_DIR/logs/$SNAPSHOT_STATE" ]]; then
+    success "✔ Inventario del sistema: $SNAPSHOT_STATE"
+else
+    warn "⚠️ Inventario del sistema no disponible"
+fi
+
+if [[ "$SESSION_LOG_STATE" != "N/A" && -f "$BASE_DIR/logs/$SESSION_LOG_STATE" ]]; then
+    success "✔ Registro de sesión: $SESSION_LOG_STATE"
+else
+    warn "⚠️ Registro de sesión no disponible"
+fi
+
+echo ""
+echo "Ubicación: $BASE_DIR/logs/"
 
 print_completion "true"
 

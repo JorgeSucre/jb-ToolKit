@@ -27,7 +27,7 @@ check_internet_connection() {
 
 install_brew() {
 
-    if command_exists brew; then
+    if brew_available; then
         BREW_FRESH_INSTALL=0
         BREW_ALREADY_INSTALLED=1
         log "✔ Homebrew ya instalado"
@@ -55,12 +55,17 @@ install_brew() {
             info "ℹ️ Homebrew puede solicitar contraseña y confirmación de instalación"
             echo ""
 
-            if /bin/bash "$INSTALL_SCRIPT"; then
+            if run_cmd --visible /bin/bash "$INSTALL_SCRIPT"; then
 
                 BREW_FRESH_INSTALL=1
-                log "✔ Homebrew instalado correctamente"
+                log "✔ Instalador de Homebrew finalizado"
 
-                return 0
+                if configure_brew && validate_brew; then
+                    log "✔ Homebrew instalado y validado correctamente"
+                    return 0
+                fi
+
+                warn "⚠️ El instalador terminó, pero Homebrew no quedó disponible"
             fi
 
             warn "⚠️ Homebrew no pudo instalarse correctamente"
@@ -105,17 +110,40 @@ configure_brew() {
         return 1
     fi
 
-    eval "$("$BREW_BIN" shellenv)"
+    local shellenv
+    shellenv="$("$BREW_BIN" shellenv 2>/dev/null)" || {
+        error_msg "❌ No se pudo obtener brew shellenv"
+        return 1
+    }
+    eval "$shellenv"
 
     export PATH="$(dirname "$BREW_BIN"):$PATH"
 
-    BREW_OK=1
+    command -v brew >/dev/null 2>&1 || {
+        error_msg "❌ brew no quedó disponible en PATH"
+        return 1
+    }
 
     if (( ! BREW_ALREADY_INSTALLED )); then
         log "✔ brew listo para usarse"
     fi
 
     return 0
+}
+
+validate_brew() {
+    if ! command -v brew >/dev/null 2>&1; then
+        error_msg "❌ Homebrew no está disponible en PATH después de la instalación"
+        return 1
+    fi
+
+    if ! brew --version >/dev/null 2>&1; then
+        error_msg "❌ Homebrew está en PATH, pero no responde correctamente"
+        return 1
+    fi
+
+    BREW_BIN="$(command -v brew)"
+    BREW_OK=1
 }
 
 update_brew_indexes() {
@@ -146,14 +174,24 @@ update_brew_indexes() {
 
     log "🔄 Actualizando índices Homebrew..."
 
-    HOMEBREW_NO_ENV_HINTS=1 brew update >/dev/null 2>&1 || true
-
-    success "✔ Índices Homebrew sincronizados"
+    if HOMEBREW_NO_ENV_HINTS=1 run_cmd brew update; then
+        success "✔ Índices Homebrew sincronizados"
+    else
+        warn "⚠️ No se pudieron actualizar los índices de Homebrew"
+        return 1
+    fi
 }
 
 select_brewfile() {
 
-    BREWFILE="$BASE_DIR/Brewfile"
+    if [[ -f "$BASE_DIR/Brewfile" ]]; then
+        BREWFILE="$BASE_DIR/Brewfile"
+    elif [[ -f "$BASE_DIR/brewfile" ]]; then
+        BREWFILE="$BASE_DIR/brewfile"
+    else
+        error_msg "❌ No se encontró Brewfile ni brewfile"
+        return 1
+    fi
     ARCH_NAME="$(uname -m)"
 
     if [[ "$ARCH_NAME" == "arm64" ]]; then
@@ -174,15 +212,15 @@ prepare_brewfile() {
 
     TEMP_BREWFILE="/tmp/jb_brewfile.$$"
 
-    cp "$BREWFILE" "$TEMP_BREWFILE"
+    cp "$BREWFILE" "$TEMP_BREWFILE" || return 1
 
 }
 
 sync_brewfile() {
 
-    INSTALL_COUNT=$(grep -E '^(brew|cask)' "$TEMP_BREWFILE" \
-        | wc -l \
-        | tr -d ' ')
+    INSTALL_COUNT=$(grep -Ec '^(brew|cask) ' "$TEMP_BREWFILE" 2>/dev/null \
+        || true)
+    INSTALL_COUNT=${INSTALL_COUNT:-0}
 
     log "📦 Aplicando $(basename "$BREWFILE")..."
 
@@ -193,7 +231,7 @@ sync_brewfile() {
 
     echo ""
 
-    if retry 2 5 brew bundle --file="$TEMP_BREWFILE"; then
+    if retry 2 5 run_cmd --visible "$BREW_BIN" bundle --file="$TEMP_BREWFILE"; then
 
         success "✔ Brewfile sincronizado correctamente"
 

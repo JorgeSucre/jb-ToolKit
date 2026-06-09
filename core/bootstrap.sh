@@ -9,11 +9,17 @@ TOTAL_STAGES=5
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$BASE_DIR/core/utils.sh"
+# Session is owned by the jb launcher.
+# Only initialize a fallback session when run standalone (outside jb).
+
+
+init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 source "$BASE_DIR/core/bootstrap/stages.sh"
 source "$BASE_DIR/core/bootstrap/brew.sh"
 source "$BASE_DIR/core/bootstrap/packages.sh"
 source "$BASE_DIR/core/bootstrap/hardware.sh"
+set_ui_context "Bootstrap"
 
 STATE_FILE="$BASE_DIR/logs/state.env"
 mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
@@ -62,156 +68,75 @@ else
     echo "Homebrew requiere acceso sudo en macOS"
 fi
 
-INSTALL_BROWSER="false"
-INSTALL_LOGI_OPTIONS="false"
-INSTALL_OFFICE="false"
-INSTALL_COMMUNICATION_APPS="false"
-INSTALL_AI_APPS="false"
-INSTALL_DEV_TOOLS="false"
-INSTALL_ANDROID_TOOLS="false"
-INSTALL_MEDIA_TOOLS="false"
-INSTALL_MONITORING_TOOLS="false"
-INSTALL_CONNECTIVITY_TOOLS="false"
-
 BREW_OK=0
 
-if install_brew; then
-    BREW_OK=1
-else
-    log "⚠️ Brew no disponible, algunas funciones fallarán"
+if ! install_brew; then
+    error_msg "❌ Bootstrap no puede continuar sin Homebrew"
+    print_completion "false"
+    exit 1
 fi
 
-configure_brew || true
-BREWFILE="$BASE_DIR/Brewfile"
+if ! configure_brew || ! validate_brew; then
+    error_msg "❌ Homebrew no está disponible después de la instalación"
+    print_completion "false"
+    exit 1
+fi
+BREW_OK=1
 
 print_stage "Configurando Homebrew"
-update_brew_indexes
+update_brew_indexes || info "ℹ️ Se intentará continuar con los índices disponibles"
 
-print_section "🧩 Aplicaciones opcionales"
+print_stage "Detectando hardware"
+detect_rosetta
+print_hardware_summary
+select_brewfile || exit 1
 
-if ask_yes_no "¿Instalar herramientas de desarrollo (Node.js, pnpm, VS Code, Codex, Antigravity)?"; then
-    INSTALL_DEV_TOOLS="true"
-fi
-
-if ask_yes_no "¿Instalar herramientas Android y Java (ADB, Fastboot, OpenJDK)?"; then
-    INSTALL_ANDROID_TOOLS="true"
-fi
-
-if ask_yes_no "¿Instalar Microsoft Office y OneDrive?"; then
-    INSTALL_OFFICE="true"
-fi
-
-if ask_yes_no "¿Instalar apps de AI (ChatGPT)?"; then
-    INSTALL_AI_APPS="true"
-fi
-
-if ask_yes_no "¿Instalar apps de comunicación (Discord)?"; then
-    INSTALL_COMMUNICATION_APPS="true"
-fi
-
-if ask_yes_no "¿Instalar herramientas multimedia (Kdenlive, GIMP)?"; then
-    INSTALL_MEDIA_TOOLS="true"
-fi
-
-if ask_yes_no "¿Instalar herramientas de monitoreo y sistema (BetterDisplay, Macs Fan Control, AlDente)?"; then
-    INSTALL_MONITORING_TOOLS="true"
-fi
-
-if ask_yes_no "¿Instalar herramientas de conectividad (Tailscale)?"; then
-    INSTALL_CONNECTIVITY_TOOLS="true"
-fi
-
-if ask_yes_no "¿Instalar navegador alternativo (Floorp)?"; then
-    INSTALL_BROWSER="true"
-fi
-
-if ask_yes_no "¿Instalar Logi Options+ para periféricos Logitech?"; then
-    INSTALL_LOGI_OPTIONS="true"
-fi
+offer_hardware_recommendations
+select_optional_packages
 
 print_stage "Sincronizando paquetes"
 
-if brew_available; then
-
-    prepare_brewfile
-    if [[ ! -f "$TEMP_BREWFILE" ]]; then
-        error "❌ No se pudo preparar el Brewfile"
-        exit 1
-    fi
-
-    if [[ "$INSTALL_BROWSER" != "true" ]]; then
-        sed -i '' '/floorp/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_LOGI_OPTIONS" != "true" ]]; then
-        sed -i '' '/logi-options+/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_OFFICE" != "true" ]]; then
-        sed -i '' '/microsoft-word/d' "$TEMP_BREWFILE"
-        sed -i '' '/microsoft-excel/d' "$TEMP_BREWFILE"
-        sed -i '' '/onedrive/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_AI_APPS" != "true" ]]; then
-        sed -i '' '/chatgpt/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_COMMUNICATION_APPS" != "true" ]]; then
-        sed -i '' '/discord/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_DEV_TOOLS" != "true" ]]; then
-        sed -i '' '/node/d' "$TEMP_BREWFILE"
-        sed -i '' '/pnpm/d' "$TEMP_BREWFILE"
-        sed -i '' '/visual-studio-code/d' "$TEMP_BREWFILE"
-        sed -i '' '/codex/d' "$TEMP_BREWFILE"
-        sed -i '' '/antigravity/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_ANDROID_TOOLS" != "true" ]]; then
-        sed -i '' '/openjdk/d' "$TEMP_BREWFILE"
-        sed -i '' '/android-platform-tools/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_MEDIA_TOOLS" != "true" ]]; then
-        sed -i '' '/kdenlive/d' "$TEMP_BREWFILE"
-        sed -i '' '/gimp/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_MONITORING_TOOLS" != "true" ]]; then
-        sed -i '' '/betterdisplay/d' "$TEMP_BREWFILE"
-        sed -i '' '/macs-fan-control/d' "$TEMP_BREWFILE"
-        sed -i '' '/aldente/d' "$TEMP_BREWFILE"
-    fi
-
-    if [[ "$INSTALL_CONNECTIVITY_TOOLS" != "true" ]]; then
-        sed -i '' '/tailscale-app/d' "$TEMP_BREWFILE"
-    fi
-
-    EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
-    EXPECTED_CASKS=$(grep '^cask ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
-
-    INSTALLED_BREW=$(brew list --formula 2>/dev/null || true)
-    INSTALLED_CASKS=$(brew list --cask 2>/dev/null || true)
-
-    build_external_package_list
-    print_external_package_summary
-    ask_external_package_updates
-
-    build_outdated_package_list
-    print_outdated_summary
-    update_toolkit_packages
-    update_external_packages
-
-    sync_brewfile
-    print_installed_summary
+prepare_brewfile
+if [[ ! -f "$TEMP_BREWFILE" ]]; then
+    error_msg "❌ No se pudo preparar el Brewfile"
+    exit 1
+fi
+if ! filter_brewfile_to_selection; then
+    cleanup_brewfile
+    print_completion "false"
+    exit 1
 fi
 
-print_stage "Detectando hardware"
+EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
+EXPECTED_CASKS=$(grep '^cask ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
 
-detect_rosetta
-print_hardware_summary
+INSTALLED_BREW=$(brew list --formula 2>/dev/null || true)
+INSTALLED_CASKS=$(brew list --cask 2>/dev/null || true)
+
+build_external_package_list
+print_external_package_summary
+ask_external_package_updates
+
+build_outdated_package_list
+print_outdated_summary
+update_toolkit_packages
+update_external_packages
+
+if ! sync_brewfile; then
+    error_msg "❌ No se pudo completar brew bundle"
+    cleanup_brewfile
+    print_completion "false"
+    exit 1
+fi
+
+if ! brew list --formula fastfetch >/dev/null 2>&1; then
+    error_msg "❌ fastfetch no quedó instalado después de brew bundle"
+    cleanup_brewfile
+    print_completion "false"
+    exit 1
+fi
+print_installed_summary
+
 print_optimization_summary
 
 print_stage "Finalizando setup"
