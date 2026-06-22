@@ -23,21 +23,25 @@ brew "pnpm"
 cask "visual-studio-code"
 cask "codex"
 cask "antigravity"
+cask "claudecode"
 
 # Android / Java
 brew "openjdk"
 cask "android-platform-tools"
+brew "scrcpy"
 
 # Monitoring / System
 cask "betterdisplay"
 cask "macs-fan-control"
 cask "aldente"
+cask "stats"
 
 # Utilities / Connectivity
 cask "tailscale-app"
 
 # AI
 cask "chatgpt"
+cask "claude"
 
 # Communication
 cask "discord"
@@ -46,6 +50,30 @@ cask "discord"
 cask "kdenlive"
 cask "gimp"
 
+# Repair / Diagnostics
+cask "openboardview"
+cask "keka"
+cask "rustdesk"
+
+# Networking / Diagnostics
+brew "nmap"
+brew "iperf3"
+brew "speedtest-cli"
+brew "smartmontools"
+brew "mas"
+brew "wakeonlan"
+
+# Multimedia / Utilities
+brew "ffmpeg"
+brew "yt-dlp"
+
+# File Transfer
+cask "localsend"
+
+# Imaging / Recovery
+cask "balenaetcher"
+
 # Browsers / Utilities
 cask "floorp"
 cask "logi-options+"
+cask "google-chrome"

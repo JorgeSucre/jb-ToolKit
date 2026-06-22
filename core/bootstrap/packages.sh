@@ -9,14 +9,52 @@ TOOLKIT_OUTDATED=""
 SELECTED_PACKAGES=""
 
 OPTIONAL_PACKAGE_IDS=(
-    "microsoft-word" "microsoft-excel" "onedrive" "visual-studio-code"
-    "codex" "antigravity" "chatgpt" "discord" "kdenlive" "gimp"
-    "floorp" "logi-options+" "tailscale-app" "android-platform-tools" "openjdk"
+    "microsoft-word" "microsoft-excel" "onedrive"
+    "visual-studio-code" "codex" "antigravity"
+    "openjdk" "android-platform-tools" "scrcpy"
+    "stats"
+    "tailscale-app"
+    "chatgpt"
+    "discord"
+    "kdenlive" "gimp"
+    "openboardview" "keka" "rustdesk"
+    "nmap" "iperf3" "speedtest-cli" "smartmontools" "mas" "wakeonlan"
+    "ffmpeg" "yt-dlp"
+    "localsend"
+    "balenaetcher"
+    "floorp" "logi-options+" "google-chrome"
 )
 OPTIONAL_PACKAGE_LABELS=(
-    "Microsoft Word" "Microsoft Excel" "OneDrive" "VS Code"
-    "Codex" "Antigravity" "ChatGPT" "Discord" "Kdenlive" "GIMP"
-    "Floorp" "Logi Options+" "Tailscale" "Android Platform Tools" "OpenJDK"
+    "Microsoft Word" "Microsoft Excel" "OneDrive"
+    "VS Code" "Codex" "Antigravity"
+    "OpenJDK" "Android Platform Tools" "Scrcpy"
+    "Stats"
+    "Tailscale"
+    "ChatGPT"
+    "Discord"
+    "Kdenlive" "GIMP"
+    "OpenBoardView" "Keka" "RustDesk"
+    "Nmap" "iPerf3" "Speedtest CLI" "Smartmontools" "mas (Mac App Store CLI)" "Wake on LAN"
+    "FFmpeg" "yt-dlp"
+    "LocalSend"
+    "balenaEtcher"
+    "Floorp" "Logi Options+" "Google Chrome"
+)
+OPTIONAL_PACKAGE_CATEGORIES=(
+    "Productivity" "Productivity" "Productivity"
+    "Development" "Development" "Development"
+    "Android / Java" "Android / Java" "Android / Java"
+    "Monitoring / System"
+    "Utilities / Connectivity"
+    "AI"
+    "Communication"
+    "Creative / Media" "Creative / Media"
+    "Repair / Diagnostics" "Repair / Diagnostics" "Repair / Diagnostics"
+    "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics"
+    "Multimedia / Utilities" "Multimedia / Utilities"
+    "File Transfer"
+    "Imaging / Recovery"
+    "Browsers / Utilities" "Browsers / Utilities" "Browsers / Utilities"
 )
 
 package_selected() {
@@ -58,7 +96,7 @@ parse_package_selection() {
 }
 
 select_optional_packages() {
-    local index selection
+    local index selection prev_category=""
 
     print_section "🧩 Aplicaciones opcionales"
     if ! ask_yes_no "¿Deseas revisar aplicaciones opcionales adicionales?"; then
@@ -68,6 +106,10 @@ select_optional_packages() {
 
     echo ""
     for ((index=0; index<${#OPTIONAL_PACKAGE_IDS[@]}; index++)); do
+        if [[ "${OPTIONAL_PACKAGE_CATEGORIES[$index]}" != "$prev_category" ]]; then
+            prev_category="${OPTIONAL_PACKAGE_CATEGORIES[$index]}"
+            printf "\n%s\n" "$prev_category"
+        fi
         printf "[%s] %s\n" "$((index + 1))" "${OPTIONAL_PACKAGE_LABELS[$index]}"
     done
     echo ""
@@ -103,51 +145,71 @@ package_install_state() {
     printf "not_installed\n"
 }
 
-offer_hardware_recommendations() {
-    local recommended_ids=()
-    local recommended_labels=()
-    local selectable_ids=()
-    local selectable_labels=()
-    local index selection package state label
+# =========================
+# Hardware recommendation engine
+# =========================
+# Pure computation, no prompts or brew calls. Shared by the bootstrap
+# install flow (offer_hardware_recommendations) and the Documentation
+# module's "Recommended Tools For This Mac" view, so the family → package
+# mapping is defined exactly once.
+
+HARDWARE_RECOMMENDED_IDS=()
+HARDWARE_RECOMMENDED_LABELS=()
+
+compute_hardware_recommendations() {
+    HARDWARE_RECOMMENDED_IDS=()
+    HARDWARE_RECOMMENDED_LABELS=()
 
     detect_machine_family
 
     case "$MACHINE_FAMILY" in
         macbook_air)
-            recommended_ids=("aldente")
-            recommended_labels=("AlDente")
+            HARDWARE_RECOMMENDED_IDS=("aldente")
+            HARDWARE_RECOMMENDED_LABELS=("AlDente")
             if has_external_display; then
-                recommended_ids+=("betterdisplay")
-                recommended_labels+=("BetterDisplay")
+                HARDWARE_RECOMMENDED_IDS+=("betterdisplay")
+                HARDWARE_RECOMMENDED_LABELS+=("BetterDisplay")
             fi
             ;;
         macbook_pro)
-            recommended_ids=("aldente" "macs-fan-control")
-            recommended_labels=("AlDente" "Macs Fan Control")
+            HARDWARE_RECOMMENDED_IDS=("aldente" "macs-fan-control")
+            HARDWARE_RECOMMENDED_LABELS=("AlDente" "Macs Fan Control")
             if has_external_display; then
-                recommended_ids+=("betterdisplay")
-                recommended_labels+=("BetterDisplay")
+                HARDWARE_RECOMMENDED_IDS+=("betterdisplay")
+                HARDWARE_RECOMMENDED_LABELS+=("BetterDisplay")
             fi
             ;;
         mac_mini|mac_studio)
-            recommended_ids=("macs-fan-control" "betterdisplay")
-            recommended_labels=("Macs Fan Control" "BetterDisplay")
+            HARDWARE_RECOMMENDED_IDS=("macs-fan-control" "betterdisplay")
+            HARDWARE_RECOMMENDED_LABELS=("Macs Fan Control" "BetterDisplay")
             ;;
         imac)
-            recommended_ids=("macs-fan-control")
-            recommended_labels=("Macs Fan Control")
+            HARDWARE_RECOMMENDED_IDS=("macs-fan-control")
+            HARDWARE_RECOMMENDED_LABELS=("Macs Fan Control")
             if has_external_display; then
-                recommended_ids+=("betterdisplay")
-                recommended_labels+=("BetterDisplay")
+                HARDWARE_RECOMMENDED_IDS+=("betterdisplay")
+                HARDWARE_RECOMMENDED_LABELS+=("BetterDisplay")
             fi
             ;;
-        *) return 0 ;;
+        *) ;;
     esac
+}
+
+offer_hardware_recommendations() {
+    local selectable_ids=()
+    local selectable_labels=()
+    local index selection package state label
+
+    compute_hardware_recommendations
+
+    if [[ "${#HARDWARE_RECOMMENDED_IDS[@]}" -eq 0 ]]; then
+        return 0
+    fi
 
     print_section "🧠 Recomendaciones para este Mac"
-    for ((index=0; index<${#recommended_ids[@]}; index++)); do
-        package="${recommended_ids[$index]}"
-        label="${recommended_labels[$index]}"
+    for ((index=0; index<${#HARDWARE_RECOMMENDED_IDS[@]}; index++)); do
+        package="${HARDWARE_RECOMMENDED_IDS[$index]}"
+        label="${HARDWARE_RECOMMENDED_LABELS[$index]}"
         state=$(package_install_state "$package" 2>/dev/null || true)
         case "$state" in
             installed)

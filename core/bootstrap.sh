@@ -19,6 +19,7 @@ source "$BASE_DIR/core/bootstrap/stages.sh"
 source "$BASE_DIR/core/bootstrap/brew.sh"
 source "$BASE_DIR/core/bootstrap/packages.sh"
 source "$BASE_DIR/core/bootstrap/hardware.sh"
+source "$BASE_DIR/core/docs.sh"
 set_ui_context "Bootstrap"
 
 STATE_FILE="$BASE_DIR/logs/state.env"
@@ -92,6 +93,13 @@ print_hardware_summary
 select_brewfile || exit 1
 
 offer_hardware_recommendations
+
+print_section "📚 Documentación de herramientas"
+if ask_yes_no "¿Deseas revisar la documentación de las aplicaciones recomendadas antes de instalar?"; then
+    docs_main
+    set_ui_context "Bootstrap"
+fi
+
 select_optional_packages
 
 print_stage "Sincronizando paquetes"
