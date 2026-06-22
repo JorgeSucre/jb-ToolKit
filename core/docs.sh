@@ -92,6 +92,14 @@ docs_list_category() {
     done < <(docs_all_files)
 }
 
+docs_categories_with_content() {
+    local category
+
+    for category in "${DOCS_CATEGORY_ORDER[@]}"; do
+        [[ -n "$(docs_list_category "$category")" ]] && printf "%s\n" "$category"
+    done
+}
+
 # =========================
 # Screens
 # =========================
@@ -152,11 +160,25 @@ docs_results_menu() {
 
 docs_browse_category() {
     local category="$1"
-    local files=() file
+    local files=() file available
 
     while IFS= read -r file; do
         [[ -n "$file" ]] && files+=("$file")
     done < <(docs_list_category "$category")
+
+    if [[ "${#files[@]}" -eq 0 ]]; then
+        clear
+        print_section "📚 $category"
+        info "ℹ️ No hay guías disponibles todavía para esta categoría."
+        echo ""
+        echo "Las guías disponibles actualmente se concentran en:"
+        while IFS= read -r available; do
+            printf -- "- %s\n" "$available"
+        done < <(docs_categories_with_content)
+        echo ""
+        read -r -p "Presiona Enter para volver..." _
+        return 0
+    fi
 
     docs_results_menu "📚 $category" "${files[@]}"
 }

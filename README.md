@@ -10,6 +10,7 @@ Diseñada para técnicos, consultores de TI y usuarios avanzados, permite automa
 # ✨ Características
 
 ## 🔍 Diagnóstico del sistema
+
 =======
 Diseñada para técnicos, consultores de TI y usuarios avanzados, permite automatizar tareas comunes de soporte, optimizar equipos, instalar herramientas recomendadas y generar documentación técnica profesional.
 
@@ -18,13 +19,14 @@ Diseñada para técnicos, consultores de TI y usuarios avanzados, permite automa
 ## ✨ Características
 
 ### 🔍 Diagnóstico avanzado
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 - Análisis de CPU, RAM y almacenamiento
 - Detección de procesos con alto consumo
 - Identificación de archivos grandes
 - Evaluación de salud del sistema
-<<<<<<< HEAD
+  <<<<<<< HEAD
 - Compatibilidad con Intel y Apple Silicon
 - Inventario detallado de hardware
 
@@ -47,7 +49,7 @@ JB Toolkit genera automáticamente:
 
 Archivos generados:
 
-text logs/session_YYYY-MM-DD_HH-MM-SS.log logs/system_snapshot_YYYY-MM-DD_HH-MM-SS.txt logs/jb_report_YYYY-MM-DD_HH-MM-SS.pdf 
+text logs/session_YYYY-MM-DD_HH-MM-SS.log logs/system_snapshot_YYYY-MM-DD_HH-MM-SS.txt logs/jb_report_YYYY-MM-DD_HH-MM-SS.pdf
 
 ## 🍺 Gestión inteligente de Homebrew
 
@@ -89,7 +91,9 @@ Ejemplos:
 ---
 
 # 💻 Compatibilidad
+
 =======
+
 - Inventario detallado de hardware
 - Compatibilidad Intel y Apple Silicon
 
@@ -108,11 +112,12 @@ Ejemplos:
 - Health Score
 - Resumen de mantenimiento
 - Inventario técnico del sistema
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+  > > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 ### 📚 Biblioteca técnica de referencia (offline)
 
 <<<<<<< HEAD
+
 - Intel Macs
 - Apple Silicon (M1, M2, M3 y M4)
 
@@ -136,6 +141,7 @@ Versiones recomendadas:
 ---
 
 # 🚀 Instalación
+
 =======
 JB Toolkit incluye una base de conocimiento técnico para todas las herramientas soportadas. No es solo un catálogo de aplicaciones: enseña a usarlas.
 
@@ -147,20 +153,20 @@ Cada guía documenta:
 - Problemas comunes y su solución (troubleshooting)
 - Dependencias con otras herramientas
 - Casos reales de uso en soporte técnico (JB Repair Use Cases)
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+  > > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 Además incluye:
 
 <<<<<<< HEAD
-bash git clone https://github.com/JorgeSucre/jb-ToolKit.git 
+bash git clone https://github.com/JorgeSucre/jb-ToolKit.git
 
 Ingresa al directorio:
 
-bash cd jb-ToolKit 
+bash cd jb-ToolKit
 
 Otorga permisos de ejecución:
 
-bash chmod +x jb chmod +x core/*.sh chmod +x core/bootstrap/*.sh 
+bash chmod +x jb chmod +x core/_.sh chmod +x core/bootstrap/_.sh
 
 ---
 
@@ -168,8 +174,8 @@ bash chmod +x jb chmod +x core/*.sh chmod +x core/bootstrap/*.sh
 
 Inicia siempre la herramienta utilizando el launcher principal:
 
-bash ./jb 
-=======
+# bash ./jb
+
 - **Recomendados para este Mac**: sugerencias basadas en el hardware detectado (reutiliza el mismo motor de detección que Initial Setup)
 - **Buscar**: búsqueda offline por nombre, paquete o palabra clave
 
@@ -234,12 +240,13 @@ Inicia siempre el toolkit mediante:
 ```bash
 ./jb
 ```
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 o
 
 <<<<<<< HEAD
-bash bash jb 
+bash bash jb
 
 ---
 
@@ -247,7 +254,7 @@ bash bash jb
 
 No ejecutes módulos individuales directamente:
 
-text bootstrap.sh diagnostics.sh maintenance.sh report.sh 
+text bootstrap.sh diagnostics.sh maintenance.sh report.sh
 
 El launcher:
 
@@ -277,7 +284,9 @@ Además permite instalar aplicaciones opcionales mediante selección interactiva
 ---
 
 ## 2. Diagnostics
+
 =======
+
 ```bash
 bash jb
 ```
@@ -345,41 +354,45 @@ Antes de instalar aplicaciones opcionales, permite revisar su documentación int
 ---
 
 ### 2. Diagnostics
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 Analiza:
 
 - CPU
 - RAM
-<<<<<<< HEAD
+  <<<<<<< HEAD
 - Almacenamiento
 - Red
 - Procesos
 - Estado general del sistema
-- Hardware instalado
-=======
+- # Hardware instalado
 - Disco
 - Red
 - Procesos
 - Hardware instalado
 - Estado general del sistema
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+  > > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 Genera un Health Score para facilitar la evaluación rápida del equipo.
 
 ---
 
 <<<<<<< HEAD
+
 ## 3. Maintenance
+
 =======
+
 ### 3. Maintenance
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 Realiza:
 
 - Limpieza de cachés
 - Limpieza de logs
-<<<<<<< HEAD
+  <<<<<<< HEAD
 - Limpieza Homebrew
 - Optimización de configuraciones
 - Recuperación de espacio en disco
@@ -436,6 +449,7 @@ Dependiendo del hardware y las preferencias del usuario, JB Toolkit puede instal
 ### Multimedia
 
 =======
+
 - Limpieza de Homebrew
 - Optimización de configuraciones
 - Recuperación de espacio en disco
@@ -560,31 +574,30 @@ las recomendaciones se generan leyendo los metadatos de los archivos.
 
 - FFmpeg
 - yt-dlp
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+  > > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 - Kdenlive
 - GIMP
 
 ### Utilidades
 
 - Tailscale
-<<<<<<< HEAD
+  <<<<<<< HEAD
 - BetterDisplay
 - AlDente
-- Macs Fan Control
-=======
+- # Macs Fan Control
 - LocalSend
 - Keka
 - BetterDisplay
 - AlDente
 - Macs Fan Control
 - Stats
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+  > > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 - Logi Options+
 
 ### Navegadores
 
 - Floorp
-<<<<<<< HEAD
+  <<<<<<< HEAD
 
 ---
 
@@ -594,14 +607,14 @@ las recomendaciones se generan leyendo los metadatos de los archivos.
 
 Registro detallado de la ejecución del toolkit.
 
-text logs/session_*.log 
+text logs/session\_\*.log
 
 ## System Snapshot
 
 Inventario completo del sistema.
 
-text logs/system_snapshot_*.txt 
-=======
+# text logs/system*snapshot*\*.txt
+
 - Google Chrome
 
 ### Recuperación e imágenes
@@ -627,7 +640,8 @@ logs/system_snapshot_YYYY-MM-DD_HH-MM-SS.txt
 ```
 
 Inventario técnico completo del sistema.
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 Incluye:
 
@@ -641,11 +655,12 @@ Incluye:
 - Fastfetch
 
 <<<<<<< HEAD
+
 ## Executive PDF
 
 Reporte orientado al cliente.
 
-text logs/jb_report_*.pdf 
+text logs/jb*report*\*.pdf
 
 ---
 
@@ -663,7 +678,9 @@ Próximas mejoras:
 ---
 
 # 👨‍💻 Autor
+
 =======
+
 ### Executive PDF
 
 ```text
@@ -718,7 +735,8 @@ references/tools/_template.md   (plantilla estándar)
 ---
 
 ## 👨‍💻 Autor
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 Desarrollado por JB Repair.
 
@@ -726,7 +744,7 @@ Especialistas en:
 
 - Reparación Apple
 - Optimización macOS
-<<<<<<< HEAD
+  <<<<<<< HEAD
 - Redes y conectividad
 - Starlink
 - Automatización
@@ -735,7 +753,9 @@ Especialistas en:
 ---
 
 # 📄 Licencia
+
 =======
+
 - Soporte técnico
 - Redes
 - Starlink
@@ -744,6 +764,7 @@ Especialistas en:
 ---
 
 ## 📄 Licencia
->>>>>>> 54c9338 (Add Technical Reference Library and tool guides)
+
+> > > > > > > 54c9338 (Add Technical Reference Library and tool guides)
 
 MIT Lice
