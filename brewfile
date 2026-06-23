@@ -45,6 +45,8 @@ cask "claude"
 
 # Communication
 cask "discord"
+cask "whatsapp"
+cask "telegram"
 
 # Creative / Media
 cask "kdenlive"

@@ -67,7 +67,7 @@ print_banner() {
 
     echo ""
     echo "========================================"
-    printf "   🍺 JB Toolkit %s v0.9\n" "$UI_CONTEXT"
+    printf "   🍺 JB Toolkit %s v%s\n" "$UI_CONTEXT" "${JB_VERSION:-0.9}"
     echo "========================================"
 }
 

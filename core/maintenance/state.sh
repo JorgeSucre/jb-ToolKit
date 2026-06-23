@@ -6,6 +6,13 @@
 
 STATE_FILE="$BASE_DIR/logs/state.env"
 
+# Lightweight maintenance history — flat, append-only text file, no
+# database. One line per *completed* run: timestamp|profile|score_after.
+# Report (core/report.sh, core/report_pdf.py) reads this file directly,
+# the same way it already reads state.env/system_snapshot — there's no
+# bash-function dependency between modules, just a shared file format.
+MAINTENANCE_HISTORY_FILE="$BASE_DIR/logs/maintenance_history.log"
+
 # =========================
 # State initialization
 # =========================
@@ -44,6 +51,19 @@ calculate_post_maintenance_score() {
 }
 
 # =========================
+# Maintenance history (Objective 2 — lightweight, no database)
+# =========================
+
+append_maintenance_history() {
+
+    local timestamp="$1" profile="$2" score="$3"
+
+    mkdir -p "$(dirname "$MAINTENANCE_HISTORY_FILE")" 2>/dev/null || true
+
+    printf "%s|%s|%s\n" "$timestamp" "$profile" "$score" >> "$MAINTENANCE_HISTORY_FILE"
+}
+
+# =========================
 # State persistence
 # =========================
 
@@ -67,7 +87,12 @@ save_maintenance_state() {
         "LAST_MODULE=maintenance" \
         "LAST_DURATION=${ELAPSED:-0}" \
         "ARCH=$(uname -m)" \
-        "JB_VERSION=0.9"
+        "JB_VERSION=$JB_VERSION"
+
+    # Only completed runs get a history entry — MAINTENANCE_SKIPPED exits
+    # core/maintenance.sh before this function is ever called, so a
+    # declined run is correctly never recorded.
+    append_maintenance_history "$timestamp" "$PERFORMANCE_PROFILE" "$SCORE_AFTER"
 
     log "📁 Estado guardado correctamente"
 }

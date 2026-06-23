@@ -40,8 +40,10 @@ reports/*.pdf
 # Windows
 Thumbs.db
 
-# Skills
-.codex/
+# AI assistants
+AGENTS.md
+CLAUDE.md
 
-# Ponytail
-vendor/
+# Codex / Claude local context
+.codex/
+.claude/

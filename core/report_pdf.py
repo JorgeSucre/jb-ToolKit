@@ -1,4 +1,4 @@
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from datetime import datetime
@@ -30,6 +30,9 @@ def get_state_value(key):
         pass
     return "N/A"
 
+def is_missing_or_na(val):
+    return val is None or val == "" or str(val).strip().upper() in ("N/A", "NULL")
+
 # ===========================================================
 # System snapshot reader
 # ===========================================================
@@ -37,7 +40,7 @@ def get_state_value(key):
 def read_snapshot():
     """
     Parse the system_snapshot_*.txt file recorded at session start.
-    Returns a dict of key → value pairs from the snapshot.
+    Returns a dict of key -> value pairs from the snapshot.
     Snapshot format:  Key: value
     """
     snapshot_basename = get_state_value("LAST_SYSTEM_SNAPSHOT")
@@ -60,7 +63,7 @@ def read_snapshot():
     return data
 
 # ===========================================================
-# Fallback live queries (only used when snapshot is unavailable)
+# Fallback live queries (only used when snapshot/state is missing)
 # ===========================================================
 
 def _run(cmd, default="N/A"):
@@ -69,15 +72,14 @@ def _run(cmd, default="N/A"):
     except (subprocess.SubprocessError, FileNotFoundError):
         return default
 
-def _fallback_ram():
-    """Compute used/total RAM as a last resort."""
+def _fallback_ram_components():
+    """Best-effort live RAM read. Returns (used_gb, total_gb, pct) or None."""
     try:
         total_bytes = int(_run(["sysctl", "-n", "hw.memsize"], "0"))
         total_mb = total_bytes // (1024 * 1024)
         if total_mb <= 0:
-            return "N/A"
+            return None
 
-        # Try memory_pressure first
         mp_out = _run(["memory_pressure"], "")
         free_pct = None
         for line in mp_out.splitlines():
@@ -107,9 +109,9 @@ def _fallback_ram():
         used_gb = round(used_mb / 1024, 1)
         total_gb = total_mb // 1024
         pct = int(used_mb * 100 / total_mb) if total_mb > 0 else 0
-        return f"{used_gb} GB / {total_gb} GB ({pct}%)"
+        return used_gb, total_gb, pct
     except Exception:
-        return "N/A"
+        return None
 
 def _fallback_disk():
     """Return disk summary as a last resort."""
@@ -129,8 +131,8 @@ def _fallback_disk():
         )
     return "N/A"
 
-def _fallback_brew():
-    """Return total installed Homebrew package count as a last resort."""
+def _fallback_brew_counts():
+    """Return (formula_count, cask_count) from a live brew query, or None."""
     brew = _run(["/bin/zsh", "-lc", "command -v brew"], "")
     if not brew:
         for candidate in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew"):
@@ -138,12 +140,115 @@ def _fallback_brew():
                 brew = candidate
                 break
     if not brew:
-        return "N/A"
+        return None
     formulas = _run([brew, "list", "--formula"], "")
     casks = _run([brew, "list", "--cask"], "")
     f_count = len([l for l in formulas.splitlines() if l.strip()])
     c_count = len([l for l in casks.splitlines() if l.strip()])
-    return f"{f_count} fórmulas, {c_count} casks"
+    return f_count, c_count
+
+# ===========================================================
+# Client-friendly formatting helpers
+# ===========================================================
+# These exist so the same wording is produced whether the data came from
+# the snapshot/state (preferred) or a live fallback query — clients only
+# ever see one consistent phrasing.
+
+def format_ram(total_gb, used_gb, pct):
+    return (
+        f"RAM total: {total_gb} GB<br/>"
+        f"RAM utilizada: {used_gb} GB ({pct}% en uso)"
+    )
+
+def format_homebrew(formula_count, cask_count):
+    total = formula_count + cask_count
+    cmd_word = "herramienta de línea de comandos" if formula_count == 1 else "herramientas de línea de comandos"
+    cask_word = "aplicación instalada" if cask_count == 1 else "aplicaciones instaladas"
+    return (
+        f"{total} herramientas instaladas mediante Homebrew<br/>"
+        f"({formula_count} {cmd_word}, {cask_count} {cask_word})"
+    )
+
+ARCH_DISPLAY_NAMES = {
+    "arm64": "Apple Silicon",
+    "x86_64": "Intel",
+}
+
+def format_arch(raw_arch):
+    return ARCH_DISPLAY_NAMES.get(raw_arch, raw_arch)
+
+# ===========================================================
+# Application inventory (bridged from the shared bash detection layer)
+# ===========================================================
+# report.sh computes this using detect_app_state()/compute_hardware_
+# recommendations() — the same functions Bootstrap uses — and passes the
+# result through JB_APP_INVENTORY so detection logic is never duplicated
+# here. Format per line: "Label|state:method".
+
+def parse_app_inventory():
+    raw = os.environ.get("JB_APP_INVENTORY", "")
+    items = []
+    for line in raw.splitlines():
+        if "|" not in line:
+            continue
+        label, _, state_method = line.partition("|")
+        state, _, method = state_method.partition(":")
+        label = label.strip()
+        if not label:
+            continue
+        items.append((label, state.strip(), method.strip()))
+    return items
+
+# ===========================================================
+# Session install inventory (bridged from JB_INSTALLED_APPS_SESSION)
+# ===========================================================
+# report.sh resolves package ids from state.env's INSTALLED_APPS_SESSION
+# (written by Bootstrap — see bootstrap.sh/packages.sh) into display
+# labels and passes them here newline-separated, so this file never needs
+# its own copy of the id -> label catalog.
+
+def parse_installed_session():
+    raw = os.environ.get("JB_INSTALLED_APPS_SESSION", "")
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+# ===========================================================
+# Maintenance history (read directly — flat file, no database)
+# ===========================================================
+# core/maintenance/state.sh appends one line per completed run:
+# "timestamp|profile|score_after". Read the same way state.env/the
+# snapshot are read: directly from the shared file, never recalculated.
+
+HISTORY_FILE = os.path.join(BASE_DIR, "logs", "maintenance_history.log")
+
+def read_maintenance_history(limit=5):
+    """Return up to `limit` most recent (timestamp, profile, score) entries."""
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    entries = []
+    try:
+        with open(HISTORY_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line or "|" not in line:
+                    continue
+                parts = line.split("|")
+                if len(parts) != 3:
+                    continue
+                entries.append(tuple(parts))
+    except OSError:
+        return []
+    return list(reversed(entries))[:limit]
+
+def inventory_status_text(state, method):
+    if state == "installed":
+        if method == "manual":
+            return "Instalada (instalación manual)"
+        if method == "app-store":
+            return "Instalada (App Store)"
+        return "Instalada"
+    if state == "update":
+        return "Actualización disponible"
+    return "No instalada"
 
 # ===========================================================
 # Output path
@@ -157,7 +262,7 @@ OUTPUT = os.environ.get(
 os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
 
 # ===========================================================
-# Data assembly — snapshot first, live fallback if missing
+# Data assembly — snapshot/state first, live fallback if missing
 # ===========================================================
 
 snapshot = read_snapshot()
@@ -177,15 +282,35 @@ formulas = snap("Installed formulas")
 casks    = snap("Installed casks")
 macos    = snap("macOS")
 
-# RAM display: snapshot stores total GB; compute used from state or fallback
+# RAM: prefer the already-collected total (snapshot) + usage percentage
+# (state.env, written by Diagnostics) over recalculating live — only
+# fall back to a live query when one of those is unavailable.
+ram_display = None
+
+ram_total_gb = None
 if ram_str != "N/A":
-    # Snapshot has total RAM; for used/pct, derive from live query if needed
-    ram_display_base = ram_str  # e.g. "16 GB"
-    ram_live = _fallback_ram()
-    # Use live data for used/total/pct; it is only queried once per PDF run
-    ram_display = ram_live if ram_live != "N/A" else ram_str
-else:
-    ram_display = _fallback_ram()
+    try:
+        ram_total_gb = int(float(ram_str.split()[0]))
+    except (ValueError, IndexError):
+        ram_total_gb = None
+
+ram_used_pct = get_state_value("RAM_USED_PCT")
+
+if ram_total_gb is not None and not is_missing_or_na(ram_used_pct):
+    try:
+        pct = int(ram_used_pct)
+        used_gb = round(ram_total_gb * pct / 100, 1)
+        ram_display = format_ram(ram_total_gb, used_gb, pct)
+    except ValueError:
+        ram_display = None
+
+if ram_display is None:
+    components = _fallback_ram_components()
+    if components:
+        used_gb, total_gb, pct = components
+        ram_display = format_ram(total_gb, used_gb, pct)
+    else:
+        ram_display = "RAM: información no disponible"
 
 # Disk
 capacidad = snap("Capacidad total")
@@ -198,19 +323,28 @@ if capacidad != "N/A" and utilizado != "N/A" and uso != "N/A":
         f"Espacio utilizado: {utilizado}<br/>"
         f"Uso del disco: {uso}"
     )
+elif storage != "N/A":
+    disk_display = storage
 else:
-    if storage != "N/A":
-        disk_display = storage
-    else:
-        disk_display = _fallback_disk()
+    disk_display = _fallback_disk()
 
 # Homebrew summary
-if formulas != "N/A" and casks != "N/A":
-    brew_display = f"{formulas} fórmulas, {casks} casks"
-elif brew_ver != "N/A":
-    brew_display = brew_ver
-else:
-    brew_display = _fallback_brew()
+brew_display = None
+try:
+    brew_display = format_homebrew(int(formulas), int(casks))
+except (TypeError, ValueError):
+    brew_display = None
+
+if brew_display is None:
+    counts = _fallback_brew_counts()
+    if counts:
+        brew_display = format_homebrew(*counts)
+    elif brew_ver != "N/A":
+        brew_display = brew_ver
+    else:
+        brew_display = "Homebrew no disponible"
+
+arch_display = format_arch(arch) if arch != "N/A" else "N/A"
 
 # ===========================================================
 # State values
@@ -221,14 +355,17 @@ score_after  = get_state_value("SCORE_AFTER")
 freed_mb     = get_state_value("TOTAL_FREED_MB")
 files_removed = get_state_value("FILES_REMOVED")
 last_maint   = get_state_value("LAST_MAINTENANCE")
-
-def is_missing_or_na(val):
-    return val is None or val == "" or str(val).strip().upper() in ("N/A", "NULL")
+performance_profile = get_state_value("PERFORMANCE_PROFILE")
 
 if is_missing_or_na(last_maint):
     last_maint_display = "Maintenance no ejecutado"
 else:
     last_maint_display = last_maint
+
+if is_missing_or_na(performance_profile) or performance_profile == "none":
+    profile_display = "Ningún perfil aplicado"
+else:
+    profile_display = performance_profile
 
 try:
     if is_missing_or_na(freed_mb):
@@ -252,13 +389,17 @@ except (TypeError, ValueError):
 try:
     s = int(score_after)
     if s >= 90:
-        status = "🟢 Excelente"
+        status = "Excelente"
     elif s >= 70:
-        status = "🟡 Aceptable"
+        status = "Aceptable"
     else:
-        status = "🔴 Requiere atención"
+        status = "Requiere atención"
 except (TypeError, ValueError):
     status = "N/A"
+
+app_inventory = parse_app_inventory()
+installed_session = parse_installed_session()
+maintenance_history = read_maintenance_history()
 
 # ===========================================================
 # PDF rendering
@@ -276,21 +417,13 @@ try:
         alignment=1
     )
 
-    status_style = ParagraphStyle(
-        'StatusStyle',
-        parent=styles['Normal'],
-        fontSize=11,
-        leading=13,
-        alignment=1
-    )
-
     content = []
 
     def section(title):
         content.append(Paragraph(f"<b>{title}</b>", styles["Heading2"]))
         content.append(Spacer(1, 8))
 
-    def kv_table(data):
+    def kv_table(data, col_widths=None):
         formatted_data = []
         formatted_data.append(data[0]) # Header row
         for row in data[1:]:
@@ -303,7 +436,7 @@ try:
                     formatted_row.append(cell)
             formatted_data.append(formatted_row)
 
-        table = Table(formatted_data, colWidths=[140, 300])
+        table = Table(formatted_data, colWidths=col_widths or [140, 300])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
             ('TEXTCOLOR', (0,0), (-1,0), colors.black),
@@ -317,9 +450,13 @@ try:
         content.append(Spacer(1, 8))
 
     def separator():
-        content.append(Spacer(1, 8))
-        content.append(Paragraph("<font color='#aaaaaa'>──────────────</font>", styles["Normal"]))
-        content.append(Spacer(1, 8))
+        # A drawn rule, not a row of Unicode dash characters — renders
+        # identically in every PDF viewer because it uses PDF line-drawing
+        # operators instead of relying on a font glyph that the base
+        # Helvetica font does not actually contain.
+        content.append(Spacer(1, 6))
+        content.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#cccccc")))
+        content.append(Spacer(1, 10))
 
     # Header
     content.append(Paragraph("<b>JB Toolkit Report</b>", title_style))
@@ -328,7 +465,53 @@ try:
     content.append(Spacer(1, 10))
 
     # ----------------------------------------------------------
-    # System information — consumed from snapshot
+    # Estado general del equipo — leads with the verdict, in line
+    # with how a technician would open an in-person report.
+    # ----------------------------------------------------------
+    section("Estado general del equipo")
+
+    if status == "N/A":
+        content.append(Paragraph(
+            "<para align='center'>Ejecuta Diagnostics para calcular el estado del sistema.</para>",
+            styles["Normal"]
+        ))
+        content.append(Spacer(1, 10))
+        score_data = None
+    else:
+        score_color = "#000000"
+        if status == "Excelente":
+            score_color = "#2ecc71"
+        elif status == "Aceptable":
+            score_color = "#f39c12"
+        elif status == "Requiere atención":
+            score_color = "#e74c3c"
+
+        content.append(Paragraph(
+            f"<para align='center'><font size=22><b>{score_after}/100</b></font><br/>"
+            f"<font size=12 color='{score_color}'><b>{status}</b></font></para>",
+            styles["Normal"]
+        ))
+        content.append(Spacer(1, 10))
+
+        score_data = [["Métrica", "Valor"]]
+        if score_before not in ("N/A", ""):
+            score_data.append(["Score anterior", score_before])
+        score_data.append(["Score actual", str(score_after)])
+
+        if score_before not in ("N/A", ""):
+            if diff > 0:
+                score_data.append(["Mejora", f"+{diff} puntos"])
+            elif diff < 0:
+                score_data.append(["Cambio", f"{diff} puntos"])
+            else:
+                score_data.append(["Cambio", "Sin cambios"])
+
+    if score_data is not None:
+        kv_table(score_data)
+    separator()
+
+    # ----------------------------------------------------------
+    # System information — consumed from snapshot/state
     # ----------------------------------------------------------
     section("Información del sistema")
 
@@ -340,62 +523,11 @@ try:
         ["CPU", cpu],
         ["RAM", ram_display],
         ["Disco", disk_display],
-        ["Arquitectura", arch],
-        ["Homebrew", brew_display],
+        ["Arquitectura", arch_display],
+        ["Software instalado", brew_display],
     ]
 
     kv_table(system_data)
-    separator()
-
-    # ----------------------------------------------------------
-    # Performance / score comparison
-    # ----------------------------------------------------------
-    section("Rendimiento del sistema")
-
-    score_data = [
-        ["Métrica", "Valor"],
-        ["Score anterior", score_before],
-        ["Score actual", str(score_after)],
-    ]
-
-    if score_before not in ("N/A", ""):
-        if diff > 0:
-            score_data.append(["Mejora", f"+{diff} puntos"])
-        elif diff < 0:
-            score_data.append(["Cambio", f"{diff} puntos"])
-        else:
-            score_data.append(["Cambio", "Sin cambios"])
-
-    score_data.append(["Estado", status])
-
-    kv_table(score_data)
-
-    color = "black"
-    if "Excelente" in status:
-        color = "green"
-    elif "Aceptable" in status:
-        color = "orange"
-    elif "Requiere" in status:
-        color = "red"
-
-    content.append(Paragraph(f"<b><font color='{color}'>{status}</font></b>", status_style))
-    content.append(Spacer(1, 8))
-
-    score_color = "#000000"
-    if "Excelente" in status:
-        score_color = "#2ecc71"
-    elif "Aceptable" in status:
-        score_color = "#f39c12"
-    elif "Requiere" in status:
-        score_color = "#e74c3c"
-
-    content.append(Paragraph(
-        f"<para align='center'><font size=14><b>{score_after}/100</b></font><br/>"
-        f"<font size=10 color='{score_color}'>{status}</font></para>",
-        styles["Normal"]
-    ))
-    content.append(Spacer(1, 8))
-
     separator()
 
     # ----------------------------------------------------------
@@ -405,6 +537,7 @@ try:
 
     maint_data = [
         ["Acción", "Resultado"],
+        ["Perfil aplicado", profile_display],
         ["Espacio liberado", freed_display],
         ["Archivos eliminados", files_removed_display],
         ["Última ejecución", last_maint_display],
@@ -412,6 +545,50 @@ try:
 
     kv_table(maint_data)
     separator()
+
+    # ----------------------------------------------------------
+    # Application inventory — concise, hardware-relevant only.
+    # Omitted entirely when there is nothing to show (e.g. no
+    # hardware-specific recommendation applies to this Mac), rather
+    # than rendering an empty or "no data" section.
+    # ----------------------------------------------------------
+    if app_inventory:
+        section("Aplicaciones recomendadas")
+
+        inventory_data = [["Aplicación", "Estado"]]
+        for label, state, method in app_inventory:
+            inventory_data.append([label, inventory_status_text(state, method)])
+
+        kv_table(inventory_data)
+        separator()
+
+    # ----------------------------------------------------------
+    # Session install inventory — only packages that actually went from
+    # not-installed to installed/updated during this Bootstrap run.
+    # Omitted entirely when nothing was installed this session.
+    # ----------------------------------------------------------
+    if installed_session:
+        section("Software instalado durante esta sesión")
+
+        for label in installed_session:
+            content.append(Paragraph(f"✓ {label}", styles["Normal"]))
+        content.append(Spacer(1, 8))
+        separator()
+
+    # ----------------------------------------------------------
+    # Recent maintenance history — last 5 completed runs, newest first.
+    # Read directly from the flat history file; omitted entirely the
+    # first time Maintenance has ever run (file doesn't exist yet).
+    # ----------------------------------------------------------
+    if maintenance_history:
+        section("Historial reciente de mantenimiento")
+
+        history_data = [["Fecha", "Perfil", "Score"]]
+        for hist_timestamp, hist_profile, hist_score in maintenance_history:
+            history_data.append([hist_timestamp, hist_profile, hist_score])
+
+        kv_table(history_data, col_widths=[160, 140, 140])
+        separator()
 
     # ----------------------------------------------------------
     # Summary
@@ -449,23 +626,35 @@ try:
 
     section("Resumen")
     content.append(Paragraph(summary_text, styles["Normal"]))
-    content.append(Spacer(1, 8))
+    content.append(Spacer(1, 10))
+    content.append(Paragraph(
+        "<font size=8 color='#888888'>Reporte generado automáticamente por JB Toolkit.</font>",
+        styles["Normal"]
+    ))
 
-    section("Detalles")
-    kv_table([
-        ["Campo", "Valor"],
-        ["Generado por", "JB Toolkit"],
-        ["Ruta del reporte", OUTPUT],
-    ])
+    # ----------------------------------------------------------
+    # Footer metadata. JB_VERSION is exported once, by core/utils.sh
+    # ("export JB_VERSION=...") — the single source of truth every module
+    # (banner, state.env, snapshot, this PDF) reads from; never hardcoded
+    # here.
+    # ----------------------------------------------------------
+    jb_version = os.environ.get("JB_VERSION", "N/A")
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    content.append(Spacer(1, 4))
+    content.append(Paragraph(
+        f"<font size=8 color='#888888'>Generated: {generated_at}<br/>"
+        f"Toolkit Version: {jb_version}</font>",
+        styles["Normal"]
+    ))
 
     doc.build(content)
 
     if os.path.exists(OUTPUT):
-        print(f"📄 PDF generado en {OUTPUT}")
+        print(f"PDF generado en {OUTPUT}")
     else:
-        print("❌ Error generando PDF")
+        print("Error generando PDF")
 
 except Exception as e:
-    print("❌ Fallo en generación de PDF")
+    print("Fallo en generación de PDF")
     print(e)
     sys.exit(1)

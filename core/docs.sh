@@ -24,6 +24,7 @@ DOCS_CATEGORY_ORDER=(
     "Productivity"
     "Development"
     "AI"
+    "Communication"
     "Android"
     "Networking"
     "Repair & Diagnostics"

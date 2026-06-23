@@ -41,7 +41,12 @@ if [[ "$HAS_FASTFETCH" == "true" ]]; then
     echo ""
 fi
 
-SCORE=$(calculate_health_score)
+# Ejecutar en el shell actual (sin "$(...)") para que los efectos
+# secundarios de calculate_health_score (SYS_RAM_PCT, SYS_DISK_PCT,
+# SYS_CPU_LOAD) sobrevivan; un subshell los descartaría y persistiría
+# ceros en state.env.
+calculate_health_score >/dev/null
+SCORE="$SYS_HEALTH_SCORE"
 
 CPU_LOAD=$SYS_CPU_LOAD
 CPU_INT=$(echo "$CPU_LOAD" | tr -dc '0-9')
@@ -174,7 +179,7 @@ write_state_values \
     "LAST_DIAGNOSTIC=$(date +%Y-%m-%d_%H:%M:%S)" \
     "LAST_MODULE=diagnostics" \
     "ARCH=$(uname -m)" \
-    "JB_VERSION=0.9" \
+    "JB_VERSION=$JB_VERSION" \
     "CPU_LOAD=$SYS_CPU_LOAD" \
     "RAM_USED_PCT=$SYS_RAM_PCT" \
     "DISK_USED_PCT=$SYS_DISK_PCT"

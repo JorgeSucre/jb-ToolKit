@@ -17,6 +17,15 @@ source "$BASE_DIR/core/utils.sh"
 init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 
+# Needed for the app-inventory sections below (hardware recommendations +
+# the optional-app catalog used by detect_app_state/package_label_for) —
+# sourced once here instead of inside the PDF block so the console report
+# can show the same data even when the user declines the PDF.
+declare -f compute_hardware_recommendations >/dev/null 2>&1 \
+    || source "$BASE_DIR/core/bootstrap/hardware.sh"
+declare -f compute_hardware_recommendations >/dev/null 2>&1 \
+    || source "$BASE_DIR/core/bootstrap/packages.sh"
+
 set_ui_context "Report"
 
 # =========================
@@ -61,6 +70,15 @@ sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "No disponible"
 
 echo ""
 echo "RAM:"
+# TODO(architecture): this recalculates RAM live via sysctl/memory_pressure/
+# vm_stat instead of consuming state_value RAM_USED_PCT (written by
+# Diagnostics — see core/diagnostics.sh and AGENTS.md §6). That key is now
+# correctly populated after the subshell fix in calculate_health_score, so
+# it's safe to prefer here, but only when fresh (state.env may be N/A or
+# stale if Report runs without a recent Diagnostics pass — e.g. right after
+# Maintenance). Needs an explicit "prefer state.env, fall back to live query"
+# guard like report_pdf.py already has (see its RAM section) rather than an
+# unconditional swap — left as a follow-up, not done here to stay in scope.
 PAGE_SIZE=4096
 TOTAL_MB=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 ))
 FREE_PERCENT=$(memory_pressure 2>/dev/null \
@@ -92,6 +110,8 @@ echo "${USED_RAM_GB}GB / ${TOTAL_RAM_GB}GB (${RAM_PCT}%)"
 
 echo ""
 echo "Disco:"
+# TODO(architecture): same issue as the RAM block above — recalculates via
+# df -H instead of consuming state_value DISK_USED_PCT. See note above.
 
 DISK_INFO=$(df -H / 2>/dev/null | tail -1)
 
@@ -209,23 +229,120 @@ if [[ "$PERFORMANCE_PROFILE_STATE" != "N/A" && "$PERFORMANCE_PROFILE_STATE" != "
     echo "• Perfil aplicado: $PERFORMANCE_PROFILE_STATE"
 fi
 
+# =========================
+# Aplicaciones recomendadas (Homebrew vs. manual vs. no instalada)
+# =========================
+# Reuses the same detection engine Bootstrap uses (detect_app_state via
+# compute_hardware_recommendations) — never re-implemented here. Wording
+# stays honest: manual installs are never described as "updated" or
+# "actualizado", since Homebrew has no version visibility into them.
+compute_hardware_recommendations
+
+APP_INVENTORY=""
+for ((i=0; i<${#HARDWARE_RECOMMENDED_IDS[@]}; i++)); do
+    pkg="${HARDWARE_RECOMMENDED_IDS[$i]}"
+    label="${HARDWARE_RECOMMENDED_LABELS[$i]}"
+    bundle="$(package_app_bundle_name "$pkg")"
+    full_state="$(detect_app_state "$pkg" "$bundle" 2>/dev/null || echo not_installed:none)"
+    APP_INVENTORY+="${label}|${full_state}"$'\n'
+done
+export JB_APP_INVENTORY="$APP_INVENTORY"
+
+if [[ -n "${APP_INVENTORY//$'\n'/}" ]]; then
+    echo ""
+    section "Aplicaciones recomendadas"
+
+    while IFS='|' read -r label full_state; do
+        [[ -z "$label" ]] && continue
+        state="${full_state%%:*}"
+        method="${full_state##*:}"
+
+        case "$state" in
+            installed)
+                if [[ "$method" == "manual" ]]; then
+                    echo "⚠ $label (Instalación manual)"
+                elif [[ "$method" == "app-store" ]]; then
+                    echo "✓ $label (App Store)"
+                else
+                    echo "✓ $label (Homebrew)"
+                fi
+                ;;
+            update)
+                echo "✓ $label (Homebrew, actualización disponible)"
+                ;;
+            *)
+                echo "✗ $label (No instalada)"
+                ;;
+        esac
+    done <<< "$APP_INVENTORY"
+fi
+
+# =========================
+# Software instalado durante esta sesión (Bootstrap)
+# =========================
+# INSTALLED_APPS_SESSION is written once per Bootstrap run (see
+# bootstrap.sh) and only ever contains packages that transitioned from
+# not-installed to installed/updated during that run — never
+# already-installed or failed packages.
+INSTALLED_APPS_SESSION_STATE="$(state_value INSTALLED_APPS_SESSION)"
+INSTALLED_SESSION_LABELS=""
+
+if [[ "$INSTALLED_APPS_SESSION_STATE" != "N/A" && -n "$INSTALLED_APPS_SESSION_STATE" ]]; then
+    IFS=',' read -ra _installed_session_ids <<< "$INSTALLED_APPS_SESSION_STATE"
+    for pkg in "${_installed_session_ids[@]}"; do
+        [[ -z "$pkg" ]] && continue
+        INSTALLED_SESSION_LABELS+="$(package_label_for "$pkg")"$'\n'
+    done
+fi
+export JB_INSTALLED_APPS_SESSION="$INSTALLED_SESSION_LABELS"
+
+if [[ -n "${INSTALLED_SESSION_LABELS//$'\n'/}" ]]; then
+    echo ""
+    section "Software instalado durante esta sesión"
+
+    while IFS= read -r label; do
+        [[ -z "$label" ]] && continue
+        echo "✓ $label"
+    done <<< "$INSTALLED_SESSION_LABELS"
+fi
+
+# =========================
+# Historial reciente de mantenimiento
+# =========================
+# Reads core/maintenance/state.sh's flat history file directly (same
+# pattern as state_value reading state.env) — Report never sources
+# maintenance modules or recalculates anything, it only displays the last
+# 5 lines someone else already wrote.
+MAINTENANCE_HISTORY_FILE="$BASE_DIR/logs/maintenance_history.log"
+
+if [[ -f "$MAINTENANCE_HISTORY_FILE" && -s "$MAINTENANCE_HISTORY_FILE" ]]; then
+    echo ""
+    section "Historial reciente de mantenimiento"
+
+    while IFS='|' read -r hist_timestamp hist_profile hist_score; do
+        [[ -z "$hist_timestamp" ]] && continue
+        printf "• %s — perfil: %s — score: %s\n" "$hist_timestamp" "$hist_profile" "$hist_score"
+    done < <(tail -r "$MAINTENANCE_HISTORY_FILE" 2>/dev/null | head -n 5)
+fi
+
 PDF_GENERATED="false"
 PDF_BASENAME=""
 
 echo ""
 if ask_yes_no "¿Generar PDF ejecutivo también?"; then
-    if ! run_cmd python3 -c "import reportlab"; then
-        info "ℹ️ Instalando dependencia para el reporte PDF"
-        if ! run_cmd python3 -m pip install --user reportlab --quiet; then
-            warn "⚠️ No se pudo instalar reportlab; el PDF se omitirá"
-        fi
+    # Usa un entorno virtual propio del toolkit (core/utils.sh) en vez de
+    # python3/pip del sistema u Homebrew: evita el bloqueo PEP 668
+    # "externally-managed-environment" al instalar reportlab.
+    info "ℹ️ Preparando entorno Python para el reporte PDF"
+    if ! ensure_pdf_python; then
+        warn "⚠️ No se pudo preparar reportlab; el PDF se omitirá"
     fi
 
-    if run_cmd python3 -c "import reportlab"; then
+    if [[ -n "$JB_PDF_PYTHON" ]]; then
         PDF_BASENAME="jb_report_$(date '+%Y-%m-%d_%H-%M-%S').pdf"
         export JB_PDF_OUTPUT="$BASE_DIR/logs/$PDF_BASENAME"
 
-        if run_cmd python3 "$BASE_DIR/core/report_pdf.py" \
+        if run_cmd "$JB_PDF_PYTHON" "$BASE_DIR/core/report_pdf.py" \
             && [[ -f "$JB_PDF_OUTPUT" ]]; then
             PDF_GENERATED="true"
             write_state_values "LAST_PDF_REPORT=$PDF_BASENAME"

@@ -15,7 +15,7 @@ OPTIONAL_PACKAGE_IDS=(
     "stats"
     "tailscale-app"
     "chatgpt"
-    "discord"
+    "discord" "whatsapp" "telegram"
     "kdenlive" "gimp"
     "openboardview" "keka" "rustdesk"
     "nmap" "iperf3" "speedtest-cli" "smartmontools" "mas" "wakeonlan"
@@ -31,7 +31,7 @@ OPTIONAL_PACKAGE_LABELS=(
     "Stats"
     "Tailscale"
     "ChatGPT"
-    "Discord"
+    "Discord" "WhatsApp" "Telegram"
     "Kdenlive" "GIMP"
     "OpenBoardView" "Keka" "RustDesk"
     "Nmap" "iPerf3" "Speedtest CLI" "Smartmontools" "mas (Mac App Store CLI)" "Wake on LAN"
@@ -47,7 +47,7 @@ OPTIONAL_PACKAGE_CATEGORIES=(
     "Monitoring / System"
     "Utilities / Connectivity"
     "AI"
-    "Communication"
+    "Communication" "Communication" "Communication"
     "Creative / Media" "Creative / Media"
     "Repair / Diagnostics" "Repair / Diagnostics" "Repair / Diagnostics"
     "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics" "Networking / Diagnostics"
@@ -121,28 +121,65 @@ select_optional_packages() {
     parse_package_selection "$selection" "${#OPTIONAL_PACKAGE_IDS[@]}"
 }
 
-package_install_state() {
+# =========================
+# Manual-install fallback metadata
+# =========================
+# Homebrew only knows about software it installed itself. A technician's
+# Mac frequently has these exact apps already installed manually (DMG/PKG
+# downloads, pre-toolkit setups). This table lets detect_app_state() fall
+# back to checking /Applications so those machines aren't told to
+# "install" something that is already there.
+#
+# TODO(migration-framework): this id -> bundle-name table is also exactly
+# what a future "migrate this manual install to Homebrew" flow would need
+# (in the reverse direction: bundle -> known package id). No migration
+# logic exists yet — see core/bootstrap/MIGRATION_FRAMEWORK.md for the
+# proposed detection -> confirmation -> backup -> migration flow and its
+# constraints before building anything here.
+
+package_app_bundle_name() {
     local package="$1"
 
-    if brew list --formula "$package" >/dev/null 2>&1; then
-        if brew outdated --formula "$package" 2>/dev/null | grep -Fxq "$package"; then
-            printf "update\n"
-        else
-            printf "installed\n"
-        fi
-        return 0
-    fi
+    case "$package" in
+        aldente) echo "AlDente.app" ;;
+        betterdisplay) echo "BetterDisplay.app" ;;
+        macs-fan-control) echo "Macs Fan Control.app" ;;
+        rustdesk) echo "RustDesk.app" ;;
+        localsend) echo "LocalSend.app" ;;
+        chatgpt) echo "ChatGPT.app" ;;
+        claude) echo "Claude.app" ;;
+        claudecode) echo "Claude Code.app" ;;
+        discord) echo "Discord.app" ;;
+        google-chrome) echo "Google Chrome.app" ;;
+        floorp) echo "Floorp.app" ;;
+        visual-studio-code) echo "Visual Studio Code.app" ;;
+        codex) echo "Codex.app" ;;
+        antigravity) echo "Antigravity.app" ;;
+        microsoft-word) echo "Microsoft Word.app" ;;
+        microsoft-excel) echo "Microsoft Excel.app" ;;
+        onedrive) echo "OneDrive.app" ;;
+        tailscale-app) echo "Tailscale.app" ;;
+        kdenlive) echo "kdenlive.app" ;;
+        gimp) echo "GIMP.app" ;;
+        balenaetcher) echo "balenaEtcher.app" ;;
+        stats) echo "Stats.app" ;;
+        keka) echo "Keka.app" ;;
+        openboardview) echo "OpenBoardView.app" ;;
+        whatsapp) echo "WhatsApp.app" ;;
+        telegram) echo "Telegram.app" ;;
+        android-platform-tools) echo "" ;;
+        *) echo "" ;;
+    esac
+}
 
-    if brew list --cask "$package" >/dev/null 2>&1; then
-        if brew outdated --cask "$package" 2>/dev/null | grep -Fxq "$package"; then
-            printf "update\n"
-        else
-            printf "installed\n"
-        fi
-        return 0
-    fi
+# Returns just the tri-state ("installed" | "update" | "not_installed")
+# for callers that only care about install status, not detection method.
+package_install_state() {
+    local package="$1" bundle state
 
-    printf "not_installed\n"
+    bundle="$(package_app_bundle_name "$package")"
+    state="$(detect_app_state "$package" "$bundle")"
+    printf "%s\n" "${state%%:*}"
 }
 
 # =========================
@@ -198,7 +235,7 @@ compute_hardware_recommendations() {
 offer_hardware_recommendations() {
     local selectable_ids=()
     local selectable_labels=()
-    local index selection package state label
+    local index selection package label bundle full_state state method
 
     compute_hardware_recommendations
 
@@ -210,10 +247,22 @@ offer_hardware_recommendations() {
     for ((index=0; index<${#HARDWARE_RECOMMENDED_IDS[@]}; index++)); do
         package="${HARDWARE_RECOMMENDED_IDS[$index]}"
         label="${HARDWARE_RECOMMENDED_LABELS[$index]}"
-        state=$(package_install_state "$package" 2>/dev/null || true)
+        bundle="$(package_app_bundle_name "$package")"
+        full_state=$(detect_app_state "$package" "$bundle" 2>/dev/null || true)
+        state="${full_state%%:*}"
+        method="${full_state##*:}"
         case "$state" in
             installed)
-                success "✔ $label ya instalado y actualizado"
+                if [[ "$method" == "manual" ]]; then
+                    # TODO(migration-framework): this is the "Manual App
+                    # Detected" entry point in core/bootstrap/MIGRATION_
+                    # FRAMEWORK.md. No offer-to-migrate UI exists yet —
+                    # this only reports the manual install, it never asks
+                    # to act on it.
+                    warn "⚠ $label detectado (instalación manual, versión no verificada)"
+                else
+                    success "✔ $label ya instalado y actualizado"
+                fi
                 ;;
             update)
                 selectable_ids+=("$package")
@@ -515,6 +564,148 @@ update_toolkit_packages() {
     echo ""
 
     success "✔ Paquetes del toolkit actualizados correctamente"
+}
+
+# =========================
+# Installation verification
+# =========================
+# brew bundle exiting 0 only means the command itself didn't error — it
+# does not guarantee every requested package actually landed. This
+# captures state before sync_brewfile runs and compares it against state
+# after, so each selected package gets an honest, individual result
+# instead of a single blanket "Brewfile sincronizado correctamente".
+
+PRE_INSTALL_PACKAGES=()
+PRE_INSTALL_STATES=()
+
+capture_pre_install_states() {
+    local package bundle state
+
+    PRE_INSTALL_PACKAGES=()
+    PRE_INSTALL_STATES=()
+
+    while IFS= read -r package; do
+        [[ -z "$package" ]] && continue
+        bundle="$(package_app_bundle_name "$package")"
+        state="$(detect_app_state "$package" "$bundle")"
+        PRE_INSTALL_PACKAGES+=("$package")
+        PRE_INSTALL_STATES+=("${state%%:*}")
+    done <<< "$(printf '%s\nfastfetch\n' "$SELECTED_PACKAGES")"
+}
+
+pre_install_state_for() {
+    local package="$1" index
+
+    for ((index=0; index<${#PRE_INSTALL_PACKAGES[@]}; index++)); do
+        if [[ "${PRE_INSTALL_PACKAGES[$index]}" == "$package" ]]; then
+            printf "%s\n" "${PRE_INSTALL_STATES[$index]}"
+            return 0
+        fi
+    done
+
+    printf "not_installed\n"
+}
+
+# Packages that actually transitioned from not-installed to
+# installed/updated during this run — fastfetch is excluded since it's a
+# core toolkit dependency, not a user-selected application. Consumed by
+# Report (state.env key INSTALLED_APPS_SESSION, see bootstrap.sh).
+INSTALLED_THIS_SESSION=""
+
+# Looks up the human-readable label for a package id from the optional
+# catalog, with a static fallback for hardware-recommendation-only ids
+# (aldente/betterdisplay/macs-fan-control aren't in OPTIONAL_PACKAGE_IDS).
+# Falls back to the id itself so callers never see an empty label.
+package_label_for() {
+    local package="$1" i
+
+    for ((i=0; i<${#OPTIONAL_PACKAGE_IDS[@]}; i++)); do
+        if [[ "${OPTIONAL_PACKAGE_IDS[$i]}" == "$package" ]]; then
+            printf "%s\n" "${OPTIONAL_PACKAGE_LABELS[$i]}"
+            return 0
+        fi
+    done
+
+    case "$package" in
+        aldente) printf "AlDente\n" ;;
+        betterdisplay) printf "BetterDisplay\n" ;;
+        macs-fan-control) printf "Macs Fan Control\n" ;;
+        *) printf "%s\n" "$package" ;;
+    esac
+}
+
+verify_installed_packages() {
+    local package bundle pre_state post_state
+
+    print_section "✅ Verificación de instalación"
+
+    while IFS= read -r package; do
+        [[ -z "$package" ]] && continue
+
+        pre_state="$(pre_install_state_for "$package")"
+        bundle="$(package_app_bundle_name "$package")"
+        post_state="$(detect_app_state "$package" "$bundle")"
+        post_state="${post_state%%:*}"
+
+        case "$post_state" in
+            not_installed)
+                error_msg "❌ $package: la instalación falló"
+                ;;
+            update)
+                if [[ "$pre_state" == "not_installed" ]]; then
+                    success "✔ $package instalado correctamente"
+                    [[ "$package" != "fastfetch" ]] && INSTALLED_THIS_SESSION+="$package"$'\n'
+                else
+                    warn "⚠ $package ya estaba instalado"
+                fi
+                ;;
+            installed)
+                if [[ "$pre_state" == "not_installed" ]]; then
+                    success "✔ $package instalado correctamente"
+                    [[ "$package" != "fastfetch" ]] && INSTALLED_THIS_SESSION+="$package"$'\n'
+                elif [[ "$pre_state" == "update" ]]; then
+                    success "⬆ $package actualizado correctamente"
+                else
+                    warn "⚠ $package ya estaba instalado"
+                fi
+                ;;
+        esac
+    done <<< "$(printf '%s\nfastfetch\n' "$SELECTED_PACKAGES")"
+}
+
+# =========================
+# Application inventory (design, not yet wired into any flow)
+# =========================
+# Reusable across Bootstrap, Documentation, and Report once a concrete
+# use case needs it — kept here because it depends only on the catalog
+# arrays and detect_app_state already defined in this file.
+
+print_app_inventory() {
+    local index package label bundle state method method_label
+
+    print_section "📦 Inventario de aplicaciones"
+
+    for ((index=0; index<${#OPTIONAL_PACKAGE_IDS[@]}; index++)); do
+        package="${OPTIONAL_PACKAGE_IDS[$index]}"
+        label="${OPTIONAL_PACKAGE_LABELS[$index]}"
+        bundle="$(package_app_bundle_name "$package")"
+        state="$(detect_app_state "$package" "$bundle")"
+        method="${state##*:}"
+        state="${state%%:*}"
+
+        case "$method" in
+            homebrew-formula | homebrew-cask) method_label="Homebrew" ;;
+            manual) method_label="Manual" ;;
+            app-store) method_label="App Store" ;;
+            *) method_label="" ;;
+        esac
+
+        case "$state" in
+            installed) printf "📦 %-22s Instalado (%s)\n" "$label" "$method_label" ;;
+            update)    printf "📦 %-22s Actualización disponible (%s)\n" "$label" "$method_label" ;;
+            *)         printf "📦 %-22s No instalado\n" "$label" ;;
+        esac
+    done
 }
 
 # =========================

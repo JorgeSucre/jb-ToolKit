@@ -22,7 +22,11 @@ apply_light_optimization() {
 
     PERFORMANCE_PROFILE="light"
 
-    log "⚡ Aplicando optimización ligera..."
+    if [[ "$silent" != "true" ]]; then
+
+        log "⚡ Aplicando optimización ligera..."
+
+    fi
 
     # Reduce Motion
     defaults write com.apple.universalaccess \
@@ -64,6 +68,14 @@ apply_aggressive_optimization() {
     log "⚡ Aplicando optimización agresiva..."
 
     apply_light_optimization "true"
+
+    # apply_light_optimization() sets PERFORMANCE_PROFILE="light" as part
+    # of its own bookkeeping (it's also called standalone for the actual
+    # light profile). Reusing it here as a base for the aggressive profile
+    # clobbers that global, so restore it before continuing — otherwise
+    # state.env/reports record "light" even though the aggressive-only
+    # actions below (AdLib, Siri/Assistant, login-item removal) also ran.
+    PERFORMANCE_PROFILE="aggressive"
 
     # Personalized ads
     defaults write com.apple.AdLib \

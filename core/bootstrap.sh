@@ -123,6 +123,8 @@ print_outdated_summary
 update_toolkit_packages
 update_external_packages
 
+capture_pre_install_states
+
 if ! sync_brewfile; then
     error_msg "❌ No se pudo completar brew bundle"
     cleanup_brewfile
@@ -136,7 +138,16 @@ if ! brew list --formula fastfetch >/dev/null 2>&1; then
     print_completion "false"
     exit 1
 fi
+
+verify_installed_packages
 print_installed_summary
+
+# Persist which packages were actually installed (not already-installed,
+# not failed) this run, so Report can show a session inventory. Always
+# write the key — even empty — so a session with no new installs doesn't
+# inherit a stale list from a previous bootstrap run.
+INSTALLED_APPS_SESSION_VALUE=$(printf "%s" "$INSTALLED_THIS_SESSION" | sed '/^$/d' | paste -sd ',' -)
+write_state_values "INSTALLED_APPS_SESSION=$INSTALLED_APPS_SESSION_VALUE"
 
 print_optimization_summary
 

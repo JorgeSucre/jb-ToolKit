@@ -75,6 +75,53 @@ app_age_days() {
     echo $(( (now - modified) / 86400 ))
 }
 
+# Real usage signal: kMDItemLastUsedDate is Launch Services metadata,
+# updated every time the app is actually opened (Dock/Spotlight/Finder) —
+# unlike app_age_days() above, which only reflects when the .app bundle's
+# files were last written (install/update), not when it was last used.
+# Returns the number of days since last launch, or nothing (empty stdout,
+# exit 1) when Spotlight has no record — caller must fall back to
+# app_age_days() in that case. No new dependency: mdls ships with macOS.
+app_last_used_days() {
+
+    local app_path="$1"
+    local last_used_raw last_used_epoch now
+
+    command_exists mdls || return 1
+
+    last_used_raw=$(mdls -name kMDItemLastUsedDate -raw "$app_path" 2>/dev/null)
+
+    [[ -z "$last_used_raw" || "$last_used_raw" == "(null)" ]] && return 1
+
+    last_used_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S %z" "$last_used_raw" "+%s" 2>/dev/null)
+    [[ -z "$last_used_epoch" ]] && return 1
+
+    now=$(date +%s)
+
+    echo $(( (now - last_used_epoch) / 86400 ))
+}
+
+# Combined activity signal used everywhere age_days previously was: prefers
+# real usage (kMDItemLastUsedDate) and only falls back to bundle mtime when
+# Spotlight has no usage record for this app (disabled indexing, or an app
+# that was installed but genuinely never opened). Echoes "<days>|<source>"
+# so callers can pick wording that matches what was actually measured —
+# "used" must never be described the same way as "mtime".
+app_activity_days() {
+
+    local app_path="$1"
+    local days
+
+    days="$(app_last_used_days "$app_path")"
+    if [[ -n "$days" ]]; then
+        printf "%s|used\n" "$days"
+        return 0
+    fi
+
+    days="$(app_age_days "$app_path")"
+    printf "%s|mtime\n" "$days"
+}
+
 # =========================
 # Metadata cache
 # =========================
@@ -101,12 +148,16 @@ build_app_metadata_cache() {
         local app_name
         local intel_only="false"
         local age_days
+        local activity_source
         local health_score=0
         local human_size_mb
         local risk_level="Bajo"
+        local activity
 
         app_name=$(basename "$app" .app)
-        age_days=$(app_age_days "$app")
+        activity="$(app_activity_days "$app")"
+        age_days="${activity%%|*}"
+        activity_source="${activity##*|}"
         human_size_mb=$(human_size "$size_mb")
 
         if is_intel_only_app "$app"; then
@@ -140,7 +191,7 @@ build_app_metadata_cache() {
             continue
         fi
 
-        APP_METADATA_CACHE+="$health_score|$risk_level|$app|$app_name|$size_mb|$human_size_mb|$age_days|$intel_only"$'\n'
+        APP_METADATA_CACHE+="$health_score|$risk_level|$app|$app_name|$size_mb|$human_size_mb|$age_days|$intel_only|$activity_source"$'\n'
 
     done < <(
         find /Applications "$HOME/Applications" \
@@ -175,7 +226,7 @@ scan_large_apps() {
 
         APP_CANDIDATES+="$entry"$'\n'
 
-        ((APP_COUNT++))
+        APP_COUNT=$((APP_COUNT + 1))
 
     done <<< "$APP_METADATA_CACHE"
 }
@@ -206,14 +257,23 @@ print_app_candidates() {
             app_size \
             app_size_human \
             app_age \
-            intel_only <<< "$app"
+            intel_only \
+            activity_source <<< "$app"
 
         printf "%s) %s\n" "$index" "$app_name"
         printf "   • Riesgo: %s (%s puntos)\n" "$risk_level" "$app_score"
         printf "   • Tamaño: %s\n" "$app_size_human"
 
         if [[ "$app_age" -gt 30 ]]; then
-            printf "   • Probablemente olvidada (%s días sin cambios)\n" "$app_age"
+            # "used" = kMDItemLastUsedDate (real launches) — accurate to say
+            # no recent activity. "mtime" fallback only knows the bundle's
+            # files haven't changed, which says nothing about usage, so the
+            # wording must not imply the app was forgotten.
+            if [[ "$activity_source" == "used" ]]; then
+                printf "   • Sin actividad reciente (%s días sin abrirse)\n" "$app_age"
+            else
+                printf "   • Sin cambios recientes (%s días sin actualizarse; sin datos de uso)\n" "$app_age"
+            fi
         fi
 
         if [[ "$app_size" -ge 5000 ]]; then
@@ -236,7 +296,7 @@ print_app_candidates() {
 
         APP_PATHS[$index]="$app_path"
 
-        ((index++))
+        index=$((index + 1))
 
     done <<< "$APP_CANDIDATES"
 }
@@ -289,8 +349,8 @@ move_apps_to_trash() {
 
             printf "✔ %s movida a la Papelera\n" "$app_name"
 
-            ((FILES_REMOVED++))
-            ((moved++))
+            FILES_REMOVED=$((FILES_REMOVED + 1))
+            moved=$((moved + 1))
         else
             printf "⚠️ No se pudo mover %s\n" "$app_name"
         fi

@@ -33,6 +33,7 @@ export GREEN YELLOW RED BLUE NC
 SYS_RAM_PCT=0
 SYS_DISK_PCT=0
 SYS_CPU_LOAD="0%"
+SYS_HEALTH_SCORE=0
 
 get_cpu_brand_string() {
     local cpu
@@ -108,10 +109,15 @@ calculate_health_score() {
         score=0
     fi
 
-    # Cachear métricas para uso del script invocante
+    # Cachear métricas para uso del script invocante.
+    # NOTA: estos efectos secundarios solo sobreviven si esta función se
+    # invoca en el shell actual (sin "$(...)"), ya que la sustitución de
+    # comandos crea un subshell y descarta cualquier variable asignada
+    # dentro de él. Ver core/diagnostics.sh para el patrón correcto.
     SYS_RAM_PCT=$ram_pct
     SYS_DISK_PCT=$disk_pct
     SYS_CPU_LOAD=$cpu_load
+    SYS_HEALTH_SCORE=$score
 
     echo "$score"
 }
@@ -193,6 +199,9 @@ run_cmd() {
     output_file="${TMPDIR:-/tmp}/jb_cmd_output.$$"
     session_write CMD "$command_text"
 
+    local had_errexit="false"
+    [[ "$-" == *e* ]] && had_errexit="true"
+
     set +e
     if [[ "$visible" == "true" ]]; then
         "$@" 2>&1 | tee "$output_file"
@@ -201,7 +210,7 @@ run_cmd() {
         "$@" >"$output_file" 2>&1
         exit_code=$?
     fi
-    set -e
+    [[ "$had_errexit" == "true" ]] && set -e
 
     if [[ -s "$output_file" && -n "${JB_SESSION_LOG:-}" ]]; then
         sed 's/^/    /' "$output_file" >> "$JB_SESSION_LOG" 2>/dev/null || true
@@ -430,6 +439,113 @@ brew_available() {
 brew_prefix_safe() {
     ensure_brew_path || return 1
     brew --prefix 2>/dev/null
+}
+
+# =========================
+# PDF Python environment (ReportLab)
+# =========================
+# Modern Homebrew/system Python builds mark themselves PEP 668
+# "externally-managed-environment", so "pip install --user reportlab"
+# against whichever python3 happens to be on PATH can fail outright. A
+# private, toolkit-owned venv sidesteps that entirely and is immune to
+# PATH ordering or Homebrew Python upgrades. This function is silent by
+# design (utils.sh never calls the UI helpers) — callers own messaging.
+# Call it directly (never via "$(...)") so JB_PDF_PYTHON survives in the
+# caller's shell.
+JB_VENV_DIR="$BASE_DIR/.venv"
+JB_PDF_PYTHON=""
+
+ensure_pdf_python() {
+    local venv_python="$JB_VENV_DIR/bin/python3"
+
+    if [[ ! -x "$venv_python" ]]; then
+        command_exists python3 || return 1
+        python3 -m venv "$JB_VENV_DIR" >/dev/null 2>&1 || return 1
+    fi
+
+    [[ -x "$venv_python" ]] || return 1
+
+    if ! "$venv_python" -c "import reportlab" >/dev/null 2>&1; then
+        "$venv_python" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
+        "$venv_python" -m pip install --quiet reportlab >/dev/null 2>&1 || return 1
+    fi
+
+    "$venv_python" -c "import reportlab" >/dev/null 2>&1 || return 1
+
+    JB_PDF_PYTHON="$venv_python"
+    return 0
+}
+
+# =========================
+# Unified application detection
+# =========================
+# Single source of truth for "is this app actually installed", reused by
+# bootstrap (recommendations + verification), docs, and report. Checks, in
+# order: Homebrew formula, Homebrew cask, manual .app bundle, Mac App Store
+# (via mas, when available). This exists because Homebrew-only detection
+# reports "not installed" for anything a user dragged into /Applications
+# from a DMG/PKG outside Homebrew — the actual root cause of Bootstrap
+# recommending software that is already present on a machine.
+
+detect_app_bundle_installed() {
+    local app_name="$1"
+
+    [[ -z "$app_name" ]] && return 1
+    [[ -d "/Applications/$app_name" ]] && return 0
+    [[ -d "$HOME/Applications/$app_name" ]] && return 0
+    return 1
+}
+
+detect_mas_app_installed() {
+    local mas_id="$1"
+
+    [[ -z "$mas_id" ]] && return 1
+    command_exists mas || return 1
+
+    mas list 2>/dev/null | awk '{print $1}' | grep -qx "$mas_id"
+}
+
+# detect_app_state <package> [app_bundle_name] [mas_id]
+# Prints "<state>:<method>\n" where state is one of:
+#   installed | update | not_installed
+# and method is one of:
+#   homebrew-formula | homebrew-cask | manual | app-store | none
+detect_app_state() {
+    local package="$1"
+    local app_name="${2:-}"
+    local mas_id="${3:-}"
+
+    if brew_available; then
+        if brew list --formula "$package" >/dev/null 2>&1; then
+            if brew outdated --formula "$package" 2>/dev/null | grep -Fxq "$package"; then
+                printf "update:homebrew-formula\n"
+            else
+                printf "installed:homebrew-formula\n"
+            fi
+            return 0
+        fi
+
+        if brew list --cask "$package" >/dev/null 2>&1; then
+            if brew outdated --cask "$package" 2>/dev/null | grep -Fxq "$package"; then
+                printf "update:homebrew-cask\n"
+            else
+                printf "installed:homebrew-cask\n"
+            fi
+            return 0
+        fi
+    fi
+
+    if detect_app_bundle_installed "$app_name"; then
+        printf "installed:manual\n"
+        return 0
+    fi
+
+    if detect_mas_app_installed "$mas_id"; then
+        printf "installed:app-store\n"
+        return 0
+    fi
+
+    printf "not_installed:none\n"
 }
 
 retry() {
