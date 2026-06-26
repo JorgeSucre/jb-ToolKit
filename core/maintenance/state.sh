@@ -87,7 +87,8 @@ save_maintenance_state() {
         "LAST_MODULE=maintenance" \
         "LAST_DURATION=${ELAPSED:-0}" \
         "ARCH=$(uname -m)" \
-        "JB_VERSION=$JB_VERSION"
+        "JB_VERSION=$JB_VERSION" \
+        "STALE_APPS_COUNT=${APP_COUNT:-0}"
 
     # Only completed runs get a history entry — MAINTENANCE_SKIPPED exits
     # core/maintenance.sh before this function is ever called, so a

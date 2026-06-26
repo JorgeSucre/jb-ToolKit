@@ -23,6 +23,10 @@
 # heuristic, not a certainty — every "Detected" result prints the exact
 # filename(s) matched so a technician can verify before drawing any
 # conclusion. Never assert more precision than the pattern match supports.
+#
+# Dry Run (v1.1): this module trivially honors the shared DRY_RUN flag
+# (core/utils.sh) by construction — it never calls a destructive command
+# in the first place, so there is nothing to gate.
 
 PRIVACY_SCAN_DIRS=(
     "$HOME/Library/LaunchAgents"

@@ -6,7 +6,7 @@
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export BASE_DIR
 export STATE_FILE="$BASE_DIR/logs/state.env"
-export JB_VERSION="${JB_VERSION:-0.9}"
+export JB_VERSION="${JB_VERSION:-1.1.0}"
 mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
 
 # =========================
@@ -572,6 +572,67 @@ section() {
 
 command_exists() {
     command -v "$1" &>/dev/null
+}
+
+# =========================
+# Dry Run (shared mechanism — v1.1)
+# =========================
+# Single, shared gate for every destructive action in the toolkit.
+# Modules never implement their own "skip if dry run" logic — they call
+# dry_run_or() (or check is_dry_run() directly for non-command branches)
+# so the behavior and wording stay identical everywhere: Bootstrap,
+# Maintenance, and any future module. Privacy never needs this — it's
+# detection-only by design and has nothing to gate.
+DRY_RUN="${DRY_RUN:-false}"
+
+is_dry_run() {
+    [[ "$DRY_RUN" == "true" ]]
+}
+
+# Usage: dry_run_or "Eliminar cachés antiguas" rm -rf "$file"
+# In Dry Run: prints "  Would: <description>" and returns 0 without
+# running anything. Otherwise runs the given command for real and
+# returns its actual exit code.
+dry_run_or() {
+    local description="$1"
+    shift
+    if is_dry_run; then
+        printf "   Would: %s\n" "$description"
+        return 0
+    fi
+    "$@"
+}
+
+print_dry_run_banner() {
+    is_dry_run || return 0
+    echo ""
+    echo "========================================"
+    echo "  DRY RUN — no se modificará nada"
+    echo "========================================"
+}
+
+print_dry_run_summary() {
+    is_dry_run || return 0
+    echo ""
+    success "✔ Nothing was modified (Dry Run)."
+}
+
+# =========================
+# FileVault detection (read-only — Diagnostics, v1.1)
+# =========================
+# fdesetup status prints "FileVault is On."/"Off."/(rarely) a permissions
+# error. Mapped to exactly three states so every caller (console, PDF,
+# recommendations) agrees on the same vocabulary. Detection only — never
+# enables or disables FileVault.
+detect_filevault_status() {
+    local raw
+    raw="$(fdesetup status 2>/dev/null)"
+
+    case "$raw" in
+        "FileVault is On."*) echo "Enabled" ;;
+        "FileVault is Off."*) echo "Disabled" ;;
+        *) echo "Unknown" ;;
+    esac
 }
 
 # =========================

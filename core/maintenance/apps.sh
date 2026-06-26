@@ -345,6 +345,12 @@ move_apps_to_trash() {
             continue
         fi
 
+        if is_dry_run; then
+            printf "   Would: mover %s a la Papelera\n" "$app_name"
+            moved=$((moved + 1))
+            continue
+        fi
+
         if mv "$app_path" ~/.Trash/ 2>/dev/null; then
 
             printf "✔ %s movida a la Papelera\n" "$app_name"
@@ -359,7 +365,11 @@ move_apps_to_trash() {
 
     if [[ "$moved" -gt 0 ]]; then
         echo ""
-        success "✔ Aplicaciones movidas correctamente"
+        if is_dry_run; then
+            info "ℹ️ Nada se movió (Dry Run)"
+        else
+            success "✔ Aplicaciones movidas correctamente"
+        fi
     fi
 }
 

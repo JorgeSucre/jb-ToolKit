@@ -212,6 +212,48 @@ def parse_installed_session():
     return [line.strip() for line in raw.splitlines() if line.strip()]
 
 # ===========================================================
+# Privacy inventory (bridged from JB_PRIVACY_INVENTORY / JB_FILEVAULT_STATUS)
+# ===========================================================
+# Detection only, computed once by core/diagnostics.sh and persisted to
+# state.env (FILEVAULT_STATUS, PRIVACY_INVENTORY) — report.sh resolves
+# those into environment variables for this script the same way it
+# already bridges JB_APP_INVENTORY. Never re-detected here.
+
+def parse_privacy_inventory():
+    raw = os.environ.get("JB_PRIVACY_INVENTORY", "")
+    items = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or "|" not in line:
+            continue
+        label, _, state = line.partition("|")
+        label = label.strip()
+        if not label:
+            continue
+        items.append((label, state.strip()))
+    return items
+
+# ===========================================================
+# Executive Recommendations (bridged from JB_RECOMMENDATIONS)
+# ===========================================================
+# report.sh computes the candidate list and priority weights by reading
+# state.env values already collected elsewhere — no new detection, no
+# recalculation here. Already capped at 5 entries by report.sh.
+
+def parse_recommendations():
+    raw = os.environ.get("JB_RECOMMENDATIONS", "")
+    items = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or "|" not in line:
+            continue
+        _, _, text = line.partition("|")
+        text = text.strip()
+        if text:
+            items.append(text)
+    return items
+
+# ===========================================================
 # Maintenance history (read directly — flat file, no database)
 # ===========================================================
 # core/maintenance/state.sh appends one line per completed run:
@@ -400,6 +442,13 @@ except (TypeError, ValueError):
 app_inventory = parse_app_inventory()
 installed_session = parse_installed_session()
 maintenance_history = read_maintenance_history()
+privacy_inventory = parse_privacy_inventory()
+filevault_status = os.environ.get("JB_FILEVAULT_STATUS", "N/A")
+recommendations = parse_recommendations()
+recommendations_priority = os.environ.get("JB_RECOMMENDATIONS_PRIORITY", "")
+network_download = os.environ.get("JB_NETWORK_DOWNLOAD", "N/A")
+network_upload = os.environ.get("JB_NETWORK_UPLOAD", "N/A")
+network_latency = os.environ.get("JB_NETWORK_LATENCY", "N/A")
 
 # ===========================================================
 # PDF rendering
@@ -527,6 +576,16 @@ try:
         ["Software instalado", brew_display],
     ]
 
+    # Optional — only present once Diagnostics has run an (opt-in) speed
+    # test at least once; never measured here.
+    if network_download != "N/A":
+        system_data.append([
+            "Velocidad de internet",
+            f"Descarga: {network_download} Mbps<br/>"
+            f"Subida: {network_upload} Mbps<br/>"
+            f"Latencia: {network_latency} ms",
+        ])
+
     kv_table(system_data)
     separator()
 
@@ -572,6 +631,47 @@ try:
 
         for label in installed_session:
             content.append(Paragraph(f"✓ {label}", styles["Normal"]))
+        content.append(Spacer(1, 8))
+        separator()
+
+    # ----------------------------------------------------------
+    # Privacy Inventory — detection only, computed once by Diagnostics.
+    # Omitted entirely when Diagnostics hasn't run yet (no state for
+    # either FileVault or the vendor inventory).
+    # ----------------------------------------------------------
+    if filevault_status != "N/A" or privacy_inventory:
+        section("Privacy Inventory")
+
+        privacy_data = [["Elemento", "Estado"]]
+        if filevault_status != "N/A":
+            privacy_data.append(["FileVault", filevault_status])
+        for label, state in privacy_inventory:
+            privacy_data.append([label, state])
+
+        kv_table(privacy_data)
+        separator()
+
+    # ----------------------------------------------------------
+    # Overall Recommendation — pure synthesis, already capped at 5 items
+    # and pre-sorted by priority in report.sh. Omitted entirely when no
+    # candidate applied (a genuinely healthy, recently-maintained Mac).
+    # ----------------------------------------------------------
+    if recommendations:
+        section("Overall Recommendation")
+
+        # Plain "N/5" rather than Unicode star glyphs — the base Helvetica
+        # font ReportLab uses here doesn't contain the star character (the
+        # same class of issue already documented for separator() above),
+        # so this avoids rendering as a missing-glyph box in the PDF.
+        if recommendations_priority:
+            content.append(Paragraph(
+                f"<para align='center'><font size=14><b>Priority: {recommendations_priority}/5</b></font></para>",
+                styles["Normal"]
+            ))
+            content.append(Spacer(1, 8))
+
+        for rec in recommendations:
+            content.append(Paragraph(f"- {rec}", styles["Normal"]))
         content.append(Spacer(1, 8))
         separator()
 

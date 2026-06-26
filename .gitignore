@@ -21,7 +21,6 @@ __pycache__/
 *.pyd
 .python-version
 .venv/
-venv/
 env/
 
 # IDEs

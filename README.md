@@ -446,17 +446,29 @@ references/tools/_template.md   (plantilla estándar)
 
 ---
 
+## 📜 Historial de cambios
+
+El historial de versiones publicadas vive en
+[`CHANGELOG.md`](CHANGELOG.md) — es la fuente para las notas de cada
+GitHub Release. El trabajo futuro (todavía no publicado) no vive ahí, sino
+en el Roadmap a continuación.
+
 ## 🔮 Roadmap
 
-- Mejor soporte para Ventura Intel
-- Más perfiles de hardware
-- Sistema de plugins
-- Catálogo ampliado de herramientas
-- Integración con Skills
-- Integración con References
-- Automatización avanzada para soporte técnico
-- Reportes avanzados
-- Documentación ampliada
+El roadmap detallado (backlog técnico, próximas versiones y visión de
+producto) vive en
+[`references/KNOWN_ISSUES.md`](references/KNOWN_ISSUES.md).
+
+Resumen de las próximas versiones:
+
+- **v1.0.1** — correcciones y pulido (mejor manejo de errores de Homebrew,
+  exponer el módulo de privacidad en el menú, ajustes menores de reporte).
+- **v1.1** — Dry Run en Maintenance, recomendaciones ejecutivas en el
+  reporte, mejoras de branding en el PDF, Homebrew Tap como mecanismo de
+  distribución.
+- **v2.0** — base de datos de clientes/inventario multi-equipo (almacenamiento
+  local), gráficos históricos del Health Score, limpieza arquitectónica del
+  catálogo de paquetes.
 
 ---
 

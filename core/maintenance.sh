@@ -25,6 +25,10 @@ source "$BASE_DIR/core/maintenance/storage.sh"
 
 print_banner
 
+if ask_yes_no "¿Ejecutar en modo de prueba (Dry Run, no se modifica nada)?"; then
+    DRY_RUN="true"
+fi
+print_dry_run_banner
 
 
 
@@ -83,7 +87,11 @@ calculate_post_maintenance_score
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 
-save_maintenance_state
+if is_dry_run; then
+    info "ℹ️ Dry Run: state.env y el historial de mantenimiento no se modificaron"
+else
+    save_maintenance_state
+fi
 
 print_maintenance_summary
 
@@ -94,5 +102,7 @@ success "• No se alteraron archivos sincronizados en la nube"
 success "• No se modificaron archivos del sistema"
 
 print_elapsed_time "$ELAPSED"
+
+print_dry_run_summary
 
 print_completion "true"

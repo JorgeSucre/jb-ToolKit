@@ -325,6 +325,163 @@ if [[ -f "$MAINTENANCE_HISTORY_FILE" && -s "$MAINTENANCE_HISTORY_FILE" ]]; then
     done < <(tail -r "$MAINTENANCE_HISTORY_FILE" 2>/dev/null | head -n 5)
 fi
 
+# =========================
+# Privacy Inventory (read state.env — written once by Diagnostics)
+# =========================
+# Never re-runs detection here — see AGENTS.md §6. FILEVAULT_STATUS and
+# PRIVACY_INVENTORY are both written by core/diagnostics.sh in one place;
+# Report only ever displays them and bridges them to the PDF.
+FILEVAULT_STATUS_STATE="$(state_value FILEVAULT_STATUS)"
+PRIVACY_INVENTORY_STATE="$(state_value PRIVACY_INVENTORY)"
+
+JB_PRIVACY_INVENTORY=""
+if [[ "$PRIVACY_INVENTORY_STATE" != "N/A" && -n "$PRIVACY_INVENTORY_STATE" ]]; then
+    JB_PRIVACY_INVENTORY="$(printf '%s' "$PRIVACY_INVENTORY_STATE" | tr ';;' '\n')"
+fi
+export JB_PRIVACY_INVENTORY
+export JB_FILEVAULT_STATUS="$FILEVAULT_STATUS_STATE"
+
+if [[ "$FILEVAULT_STATUS_STATE" != "N/A" || -n "$JB_PRIVACY_INVENTORY" ]]; then
+    echo ""
+    section "Privacy Inventory"
+
+    if [[ "$FILEVAULT_STATUS_STATE" != "N/A" ]]; then
+        echo "FileVault: $FILEVAULT_STATUS_STATE"
+        echo ""
+    fi
+
+    if [[ -n "$JB_PRIVACY_INVENTORY" ]]; then
+        while IFS='|' read -r priv_label priv_state; do
+            [[ -z "$priv_label" ]] && continue
+            echo "${priv_label}: ${priv_state}"
+        done <<< "$JB_PRIVACY_INVENTORY"
+    fi
+fi
+
+# =========================
+# Velocidad de internet (read state.env — written once by Diagnostics)
+# =========================
+# Never re-runs the speed test here; if Diagnostics hasn't run one yet,
+# this section is simply omitted.
+NETWORK_DOWNLOAD_STATE="$(state_value NETWORK_DOWNLOAD_MBPS)"
+NETWORK_UPLOAD_STATE="$(state_value NETWORK_UPLOAD_MBPS)"
+NETWORK_LATENCY_STATE="$(state_value NETWORK_LATENCY_MS)"
+NETWORK_SPEED_TIMESTAMP_STATE="$(state_value NETWORK_SPEED_TIMESTAMP)"
+
+export JB_NETWORK_DOWNLOAD="$NETWORK_DOWNLOAD_STATE"
+export JB_NETWORK_UPLOAD="$NETWORK_UPLOAD_STATE"
+export JB_NETWORK_LATENCY="$NETWORK_LATENCY_STATE"
+
+if [[ "$NETWORK_DOWNLOAD_STATE" != "N/A" ]]; then
+    echo ""
+    section "Velocidad de internet"
+    echo "Descarga: ${NETWORK_DOWNLOAD_STATE} Mbps"
+    echo "Subida: ${NETWORK_UPLOAD_STATE} Mbps"
+    echo "Latencia: ${NETWORK_LATENCY_STATE} ms"
+    echo "Medido: ${NETWORK_SPEED_TIMESTAMP_STATE}"
+fi
+
+# =========================
+# Overall Recommendation (Executive Recommendations)
+# =========================
+# Pure synthesis of values already read above (or already in state.env) —
+# no new detection, no recalculation. Each candidate has a fixed priority
+# weight; only the top 5 are ever shown, highest weight first, so the
+# technician is never overwhelmed. The star rating reflects the single
+# highest weight among the candidates that actually applied.
+STALE_APPS_COUNT_STATE="$(state_value STALE_APPS_COUNT)"
+
+OUTDATED_BREW_COUNT=0
+if brew_available; then
+    OUTDATED_BREW_COUNT=$(
+        { brew outdated --formula 2>/dev/null; brew outdated --cask 2>/dev/null; } \
+            | sed '/^$/d' | wc -l | tr -d ' '
+    )
+fi
+
+RECOMMENDATIONS=""
+
+add_recommendation() {
+    # weight|text
+    RECOMMENDATIONS+="$1|$2"$'\n'
+}
+
+DISK_USED_PCT_STATE="$(state_value DISK_USED_PCT)"
+RAM_USED_PCT_STATE="$(state_value RAM_USED_PCT)"
+
+if [[ "$DISK_USED_PCT_STATE" =~ ^[0-9]+$ && "$DISK_USED_PCT_STATE" -ge 90 ]]; then
+    add_recommendation 90 "Liberar espacio en disco (uso actual: ${DISK_USED_PCT_STATE}%)"
+elif [[ "$DISK_USED_PCT_STATE" =~ ^[0-9]+$ && "$DISK_USED_PCT_STATE" -ge 80 ]]; then
+    add_recommendation 70 "Revisar uso de almacenamiento (uso actual: ${DISK_USED_PCT_STATE}%)"
+fi
+
+if [[ "$FILEVAULT_STATUS_STATE" == "Disabled" ]]; then
+    add_recommendation 85 "Enable FileVault"
+fi
+
+if [[ "$SCORE_AFTER" =~ ^[0-9]+$ && "$SCORE_AFTER" -lt 70 ]]; then
+    add_recommendation 75 "Realizar mantenimiento general (score actual: ${SCORE_AFTER}/100)"
+fi
+
+if [[ "$STALE_APPS_COUNT_STATE" =~ ^[0-9]+$ && "$STALE_APPS_COUNT_STATE" -gt 0 ]]; then
+    add_recommendation 55 "Eliminar aplicaciones grandes inactivas (${STALE_APPS_COUNT_STATE} detectadas)"
+fi
+
+if [[ "$RAM_USED_PCT_STATE" =~ ^[0-9]+$ && "$RAM_USED_PCT_STATE" -ge 85 ]]; then
+    add_recommendation 60 "Considerar ampliar memoria RAM (uso actual: ${RAM_USED_PCT_STATE}%)"
+fi
+
+if echo "$JB_PRIVACY_INVENTORY" | grep -q "|Detected$"; then
+    add_recommendation 50 "Revisar servicios de actualización/telemetría detectados"
+fi
+
+if [[ "$OUTDATED_BREW_COUNT" -gt 0 ]]; then
+    add_recommendation 40 "Actualizar paquetes de Homebrew disponibles (${OUTDATED_BREW_COUNT})"
+fi
+
+if [[ "$LAST_MAINTENANCE" == "N/A" ]]; then
+    add_recommendation 45 "Ejecutar Maintenance — aún no se ha realizado en este equipo"
+elif [[ "$PERFORMANCE_PROFILE_STATE" == "N/A" || "$PERFORMANCE_PROFILE_STATE" == "none" ]]; then
+    add_recommendation 20 "Revisar aplicaciones de inicio"
+fi
+
+RECOMMENDATIONS="$(printf '%s' "$RECOMMENDATIONS" | sed '/^$/d' | sort -t'|' -k1 -nr | head -n 5)"
+export JB_RECOMMENDATIONS="$RECOMMENDATIONS"
+
+if [[ -n "$RECOMMENDATIONS" ]]; then
+    TOP_WEIGHT="$(printf '%s\n' "$RECOMMENDATIONS" | head -1 | cut -d'|' -f1)"
+
+    if [[ "$TOP_WEIGHT" -ge 80 ]]; then
+        STARS="★★★★★"
+        PRIORITY_LEVEL=5
+    elif [[ "$TOP_WEIGHT" -ge 60 ]]; then
+        STARS="★★★★☆"
+        PRIORITY_LEVEL=4
+    elif [[ "$TOP_WEIGHT" -ge 40 ]]; then
+        STARS="★★★☆☆"
+        PRIORITY_LEVEL=3
+    elif [[ "$TOP_WEIGHT" -ge 20 ]]; then
+        STARS="★★☆☆☆"
+        PRIORITY_LEVEL=2
+    else
+        STARS="★☆☆☆☆"
+        PRIORITY_LEVEL=1
+    fi
+    export JB_RECOMMENDATIONS_STARS="$STARS"
+    export JB_RECOMMENDATIONS_PRIORITY="$PRIORITY_LEVEL"
+
+    echo ""
+    section "Overall Recommendation"
+    echo "Priority: $STARS"
+    echo ""
+    echo "Recommended actions:"
+    echo ""
+    while IFS='|' read -r rec_weight rec_text; do
+        [[ -z "$rec_text" ]] && continue
+        echo "• $rec_text"
+    done <<< "$RECOMMENDATIONS"
+fi
+
 PDF_GENERATED="false"
 PDF_BASENAME=""
 
@@ -378,6 +535,47 @@ fi
 
 echo ""
 echo "Ubicación: $BASE_DIR/logs/"
+
+# =========================
+# Support Bundle (v1.1)
+# =========================
+# Zips up exactly the artifacts a technician would otherwise have to
+# attach one by one when asking for help: the session log, state.env,
+# the system snapshot, and the report PDF if one is available (the one
+# just generated, or the last one on record). Read-only — only ever
+# reads existing files and writes a new zip under logs/; never modifies
+# any of the source files.
+echo ""
+if ask_yes_no "¿Generar paquete de soporte (ZIP) con los archivos de esta sesión?"; then
+    SUPPORT_BUNDLE_NAME="jb_support_bundle_$(date '+%Y-%m-%d_%H-%M-%S').zip"
+    SUPPORT_BUNDLE_PATH="$BASE_DIR/logs/$SUPPORT_BUNDLE_NAME"
+
+    SUPPORT_BUNDLE_PDF=""
+    if [[ "$PDF_GENERATED" == "true" ]]; then
+        SUPPORT_BUNDLE_PDF="$BASE_DIR/logs/$PDF_BASENAME"
+    else
+        LAST_PDF_STATE="$(state_value LAST_PDF_REPORT)"
+        if [[ "$LAST_PDF_STATE" != "N/A" && -f "$BASE_DIR/logs/$LAST_PDF_STATE" ]]; then
+            SUPPORT_BUNDLE_PDF="$BASE_DIR/logs/$LAST_PDF_STATE"
+        fi
+    fi
+
+    SUPPORT_BUNDLE_FILES=()
+    [[ -f "$BASE_DIR/logs/$SESSION_LOG_STATE" ]] && SUPPORT_BUNDLE_FILES+=("$BASE_DIR/logs/$SESSION_LOG_STATE")
+    [[ -f "$BASE_DIR/logs/$SNAPSHOT_STATE" ]] && SUPPORT_BUNDLE_FILES+=("$BASE_DIR/logs/$SNAPSHOT_STATE")
+    [[ -f "$STATE_FILE" ]] && SUPPORT_BUNDLE_FILES+=("$STATE_FILE")
+    [[ -n "$SUPPORT_BUNDLE_PDF" ]] && SUPPORT_BUNDLE_FILES+=("$SUPPORT_BUNDLE_PDF")
+
+    if [[ "${#SUPPORT_BUNDLE_FILES[@]}" -eq 0 ]]; then
+        warn "⚠️ No hay archivos disponibles para el paquete de soporte"
+    elif command_exists zip \
+        && run_cmd zip -j "$SUPPORT_BUNDLE_PATH" "${SUPPORT_BUNDLE_FILES[@]}" \
+        && [[ -f "$SUPPORT_BUNDLE_PATH" ]]; then
+        success "✔ Paquete de soporte generado: $SUPPORT_BUNDLE_NAME"
+    else
+        warn "⚠️ No se pudo generar el paquete de soporte"
+    fi
+fi
 
 print_completion "true"
 

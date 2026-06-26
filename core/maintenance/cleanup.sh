@@ -124,6 +124,11 @@ cleanup_homebrew() {
         return 0
     fi
 
+    if is_dry_run; then
+        printf "   Would: %s\n" "limpiar cachés y paquetes antiguos de Homebrew"
+        return 0
+    fi
+
     local before_size
     local after_size
 
@@ -163,13 +168,17 @@ cleanup_caches() {
     fi
 
     CACHE_FILES_REMOVED="$CACHE_FILE_COUNT"
+    [[ "$CACHE_MB_FREED" -lt 0 ]] && CACHE_MB_FREED=0
+
+    if is_dry_run; then
+        printf "   Would remove: %s archivos (~%sMB) — Cachés\n" "$CACHE_FILES_REMOVED" "$CACHE_MB_FREED"
+        return 0
+    fi
 
     find ~/Library/Caches \
         -type f \
         -mtime +7 \
         -delete 2>/dev/null || true
-
-    [[ "$CACHE_MB_FREED" -lt 0 ]] && CACHE_MB_FREED=0
 
     TOTAL_FREED_MB=$((TOTAL_FREED_MB + CACHE_MB_FREED))
     FILES_REMOVED=$((FILES_REMOVED + CACHE_FILES_REMOVED))
@@ -193,13 +202,17 @@ cleanup_logs() {
     fi
 
     LOG_FILES_REMOVED="$LOG_FILE_COUNT"
+    [[ "$LOG_MB_FREED" -lt 0 ]] && LOG_MB_FREED=0
+
+    if is_dry_run; then
+        printf "   Would remove: %s archivos (~%sMB) — Logs\n" "$LOG_FILES_REMOVED" "$LOG_MB_FREED"
+        return 0
+    fi
 
     find ~/Library/Logs \
         -type f \
         -mtime +14 \
         -delete 2>/dev/null || true
-
-    [[ "$LOG_MB_FREED" -lt 0 ]] && LOG_MB_FREED=0
 
     TOTAL_FREED_MB=$((TOTAL_FREED_MB + LOG_MB_FREED))
     FILES_REMOVED=$((FILES_REMOVED + LOG_FILES_REMOVED))
@@ -223,13 +236,17 @@ cleanup_trash() {
     fi
 
     TRASH_FILES_REMOVED="$TRASH_FILE_COUNT"
+    [[ "$TRASH_MB_FREED" -lt 0 ]] && TRASH_MB_FREED=0
+
+    if is_dry_run; then
+        printf "   Would remove: %s elementos (~%sMB) — Papelera\n" "$TRASH_FILES_REMOVED" "$TRASH_MB_FREED"
+        return 0
+    fi
 
     find ~/.Trash \
         -mindepth 1 \
         -mtime +7 \
         -exec rm -rf {} + 2>/dev/null || true
-
-    [[ "$TRASH_MB_FREED" -lt 0 ]] && TRASH_MB_FREED=0
 
     TOTAL_FREED_MB=$((TOTAL_FREED_MB + TRASH_MB_FREED))
     FILES_REMOVED=$((FILES_REMOVED + TRASH_FILES_REMOVED))

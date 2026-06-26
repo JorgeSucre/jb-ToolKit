@@ -26,6 +26,11 @@ mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
 
 print_banner
 
+if ask_yes_no "¿Ejecutar en modo de prueba (Dry Run, no se instalará nada)?"; then
+    DRY_RUN="true"
+fi
+print_dry_run_banner
+
 check_internet_connection || exit 1
 
 print_section "🛠️ Preparando herramientas base"
@@ -132,22 +137,25 @@ if ! sync_brewfile; then
     exit 1
 fi
 
-if ! brew list --formula fastfetch >/dev/null 2>&1; then
-    error_msg "❌ fastfetch no quedó instalado después de brew bundle"
-    cleanup_brewfile
-    print_completion "false"
-    exit 1
+if ! is_dry_run; then
+
+    if ! brew list --formula fastfetch >/dev/null 2>&1; then
+        error_msg "❌ fastfetch no quedó instalado después de brew bundle"
+        cleanup_brewfile
+        print_completion "false"
+        exit 1
+    fi
+
+    verify_installed_packages
+    print_installed_summary
+
+    # Persist which packages were actually installed (not already-installed,
+    # not failed) this run, so Report can show a session inventory. Always
+    # write the key — even empty — so a session with no new installs doesn't
+    # inherit a stale list from a previous bootstrap run.
+    INSTALLED_APPS_SESSION_VALUE=$(printf "%s" "$INSTALLED_THIS_SESSION" | sed '/^$/d' | paste -sd ',' -)
+    write_state_values "INSTALLED_APPS_SESSION=$INSTALLED_APPS_SESSION_VALUE"
 fi
-
-verify_installed_packages
-print_installed_summary
-
-# Persist which packages were actually installed (not already-installed,
-# not failed) this run, so Report can show a session inventory. Always
-# write the key — even empty — so a session with no new installs doesn't
-# inherit a stale list from a previous bootstrap run.
-INSTALLED_APPS_SESSION_VALUE=$(printf "%s" "$INSTALLED_THIS_SESSION" | sed '/^$/d' | paste -sd ',' -)
-write_state_values "INSTALLED_APPS_SESSION=$INSTALLED_APPS_SESSION_VALUE"
 
 print_optimization_summary
 
@@ -170,6 +178,8 @@ cleanup_brewfile
 ELAPSED=$SECONDS
 
 print_elapsed_time "$ELAPSED"
+
+print_dry_run_summary
 
 if (( BREW_OK )); then
     print_completion "true"

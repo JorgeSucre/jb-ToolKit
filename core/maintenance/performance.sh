@@ -28,6 +28,13 @@ apply_light_optimization() {
 
     fi
 
+    if is_dry_run; then
+        printf "   Would disable: Motion\n"
+        printf "   Would disable: Transparency\n"
+        printf "   Would: acelerar animaciones del Dock\n"
+        return 0
+    fi
+
     # Reduce Motion
     defaults write com.apple.universalaccess \
         reduceMotion -bool true 2>/dev/null || true
@@ -76,6 +83,14 @@ apply_aggressive_optimization() {
     # state.env/reports record "light" even though the aggressive-only
     # actions below (AdLib, Siri/Assistant, login-item removal) also ran.
     PERFORMANCE_PROFILE="aggressive"
+
+    if is_dry_run; then
+        printf "   Would disable: Siri\n"
+        printf "   Would disable: personalized ads (AdLib)\n"
+        printf "   Would: remover apps de inicio (Discord, Steam, Epic Games, Microsoft Teams, Spotify si presentes)\n"
+        success "✔ Optimización agresiva (Dry Run) — nada fue modificado"
+        return 0
+    fi
 
     # Personalized ads
     defaults write com.apple.AdLib \
@@ -130,6 +145,12 @@ restore_performance_defaults() {
     PERFORMANCE_PROFILE="default"
 
     log "🔄 Restaurando configuración por defecto..."
+
+    if is_dry_run; then
+        printf "   Would: restaurar valores de Accesibilidad, Dock, Siri y AdLib a su estado por defecto\n"
+        success "✔ Restauración (Dry Run) — nada fue modificado"
+        return 0
+    fi
 
     defaults delete com.apple.universalaccess \
         reduceMotion >/dev/null 2>&1 || true

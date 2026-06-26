@@ -10,6 +10,7 @@ source "$BASE_DIR/core/utils.sh"
 
 init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
+source "$BASE_DIR/core/maintenance/privacy.sh"
 set_ui_context "Diagnostics"
 
 HAS_FASTFETCH="false"
@@ -171,6 +172,50 @@ fi
 
 printf "Estado actual: ${SCORE_COLOR}%s %s/100${NC} (%s)\n" "$SCORE_BAR" "$SCORE" "$SCORE_STATUS"
 
+# =========================
+# 🔒 Privacidad y seguridad
+# =========================
+# Detection only — never enables/disables FileVault, never modifies the
+# vendor services privacy.sh looks for. Computed once here so Report and
+# the PDF only ever read state.env instead of re-running detection
+# (AGENTS.md §6: prefer state.env over recalculation).
+print_section "🔒 Privacidad y seguridad"
+
+FILEVAULT_STATUS="$(detect_filevault_status)"
+
+case "$FILEVAULT_STATUS" in
+    Enabled) success "✔ FileVault: Enabled" ;;
+    Disabled) warn "⚠️ FileVault: Disabled" ;;
+    *) info "ℹ️ FileVault: Unknown" ;;
+esac
+
+echo ""
+echo "Inventario de privacidad (solo detección):"
+
+PRIVACY_INVENTORY=""
+for _privacy_pair in \
+    "Google Keystone|$(detect_google_keystone)" \
+    "Microsoft Office|$(detect_microsoft_office_telemetry)" \
+    "Adobe|$(detect_adobe_telemetry)" \
+    "Zoom|$(detect_zoom_analytics)"; do
+
+    _privacy_label="${_privacy_pair%%|*}"
+    _privacy_matches="${_privacy_pair#*|}"
+
+    if [[ -n "$_privacy_matches" ]]; then
+        _privacy_state="Detected"
+        warn "⚠️ ${_privacy_label}: Detected"
+    else
+        _privacy_state="Not Detected"
+        success "✔ ${_privacy_label}: Not Detected"
+    fi
+
+    PRIVACY_INVENTORY+="${_privacy_label}|${_privacy_state};;"
+done
+PRIVACY_INVENTORY="${PRIVACY_INVENTORY%;;}"
+
+echo ""
+
 # Guardar solo métricas de diagnóstico; preservar resultados de mantenimiento.
 write_state_values \
     "SCORE_BEFORE=$SCORE" \
@@ -182,9 +227,67 @@ write_state_values \
     "JB_VERSION=$JB_VERSION" \
     "CPU_LOAD=$SYS_CPU_LOAD" \
     "RAM_USED_PCT=$SYS_RAM_PCT" \
-    "DISK_USED_PCT=$SYS_DISK_PCT"
+    "DISK_USED_PCT=$SYS_DISK_PCT" \
+    "FILEVAULT_STATUS=$FILEVAULT_STATUS" \
+    "PRIVACY_INVENTORY=$PRIVACY_INVENTORY"
 
 info "📁 Estado del diagnóstico guardado correctamente"
+echo ""
+
+# =========================
+# 🌐 Velocidad de internet (opcional — nunca automático)
+# =========================
+# Uses networkQuality, built into macOS since Big Sur — no new
+# dependency. Never runs without asking first; if a result is already
+# in state.env it's shown and re-running is offered, not assumed.
+print_section "🌐 Velocidad de internet"
+
+run_internet_speed_test() {
+    command_exists networkQuality || return 1
+
+    local json dl_bps ul_bps rtt_ms
+
+    json="$(networkQuality -c 2>/dev/null)"
+    [[ -z "$json" ]] && return 1
+
+    dl_bps=$(echo "$json" | grep '"dl_throughput"' | head -1 | awk -F': ' '{print $2}' | tr -d ',')
+    ul_bps=$(echo "$json" | grep '"ul_throughput"' | head -1 | awk -F': ' '{print $2}' | tr -d ',')
+    rtt_ms=$(echo "$json" | grep '"base_rtt"' | head -1 | awk -F': ' '{print $2}' | tr -d ',')
+
+    [[ -z "$dl_bps" || -z "$ul_bps" ]] && return 1
+
+    NETWORK_DOWNLOAD_MBPS=$(awk -v b="$dl_bps" 'BEGIN{printf "%.1f", b/1000000}')
+    NETWORK_UPLOAD_MBPS=$(awk -v b="$ul_bps" 'BEGIN{printf "%.1f", b/1000000}')
+    NETWORK_LATENCY_MS=$(awk -v r="${rtt_ms:-0}" 'BEGIN{printf "%.0f", r}')
+
+    return 0
+}
+
+EXISTING_DOWNLOAD="$(state_value NETWORK_DOWNLOAD_MBPS)"
+RUN_SPEED_TEST="false"
+
+if [[ "$EXISTING_DOWNLOAD" != "N/A" ]]; then
+    info "ℹ️ Último resultado disponible ($(state_value NETWORK_SPEED_TIMESTAMP)): ${EXISTING_DOWNLOAD} Mbps ↓ / $(state_value NETWORK_UPLOAD_MBPS) Mbps ↑ / $(state_value NETWORK_LATENCY_MS) ms"
+    if ask_yes_no "¿Deseas volver a ejecutar la prueba de velocidad?"; then
+        RUN_SPEED_TEST="true"
+    fi
+elif ask_yes_no "¿Deseas ejecutar una prueba de velocidad de internet? (opcional, ~10-20s)"; then
+    RUN_SPEED_TEST="true"
+fi
+
+if [[ "$RUN_SPEED_TEST" == "true" ]]; then
+    info "ℹ️ Ejecutando prueba de velocidad..."
+    if run_internet_speed_test; then
+        success "✔ Descarga: ${NETWORK_DOWNLOAD_MBPS} Mbps · Subida: ${NETWORK_UPLOAD_MBPS} Mbps · Latencia: ${NETWORK_LATENCY_MS} ms"
+        write_state_values \
+            "NETWORK_DOWNLOAD_MBPS=$NETWORK_DOWNLOAD_MBPS" \
+            "NETWORK_UPLOAD_MBPS=$NETWORK_UPLOAD_MBPS" \
+            "NETWORK_LATENCY_MS=$NETWORK_LATENCY_MS" \
+            "NETWORK_SPEED_TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)"
+    else
+        warn "⚠️ No se pudo completar la prueba de velocidad"
+    fi
+fi
 echo ""
 
 # =========================

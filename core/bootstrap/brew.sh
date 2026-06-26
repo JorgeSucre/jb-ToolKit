@@ -222,6 +222,16 @@ sync_brewfile() {
         || true)
     INSTALL_COUNT=${INSTALL_COUNT:-0}
 
+    if is_dry_run; then
+        echo ""
+        echo "Would install:"
+        grep -E '^(brew|cask) ' "$TEMP_BREWFILE" 2>/dev/null \
+            | awk -F'"' '{print "  - " $2}'
+        echo ""
+        success "✔ Dry Run — ningún paquete fue instalado"
+        return 0
+    fi
+
     log "📦 Aplicando $(basename "$BREWFILE")..."
 
     echo ""
