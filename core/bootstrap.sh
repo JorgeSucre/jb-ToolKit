@@ -110,8 +110,8 @@ fi
 EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
 EXPECTED_CASKS=$(grep '^cask ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
 
-INSTALLED_BREW=$(brew list --formula 2>/dev/null || true)
-INSTALLED_CASKS=$(brew list --cask 2>/dev/null || true)
+INSTALLED_BREW=$(brew_list_formula)
+INSTALLED_CASKS=$(brew_list_cask)
 
 build_external_package_list
 print_external_package_summary

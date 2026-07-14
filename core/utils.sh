@@ -432,6 +432,64 @@ brew_prefix_safe() {
     brew --prefix 2>/dev/null
 }
 
+# =========================
+# Homebrew query cache
+# Session-level: each list/outdated query runs at most once per process.
+# Cache is populated lazily; skipped when brew is unavailable.
+# =========================
+_BREW_LIST_FORMULA=""
+_BREW_LIST_CASK=""
+_BREW_OUTDATED_FORMULA=""
+_BREW_OUTDATED_CASK=""
+_BREW_LIST_FORMULA_LOADED=0
+_BREW_LIST_CASK_LOADED=0
+_BREW_OUTDATED_FORMULA_LOADED=0
+_BREW_OUTDATED_CASK_LOADED=0
+
+brew_list_formula() {
+    if [[ "$_BREW_LIST_FORMULA_LOADED" -eq 0 ]] && brew_available; then
+        _BREW_LIST_FORMULA=$(brew list --formula 2>/dev/null || true)
+        _BREW_LIST_FORMULA_LOADED=1
+    fi
+    printf "%s\n" "$_BREW_LIST_FORMULA"
+}
+
+brew_list_cask() {
+    if [[ "$_BREW_LIST_CASK_LOADED" -eq 0 ]] && brew_available; then
+        _BREW_LIST_CASK=$(brew list --cask 2>/dev/null || true)
+        _BREW_LIST_CASK_LOADED=1
+    fi
+    printf "%s\n" "$_BREW_LIST_CASK"
+}
+
+brew_outdated_formula() {
+    if [[ "$_BREW_OUTDATED_FORMULA_LOADED" -eq 0 ]] && brew_available; then
+        _BREW_OUTDATED_FORMULA=$(brew outdated --formula 2>/dev/null || true)
+        _BREW_OUTDATED_FORMULA_LOADED=1
+    fi
+    printf "%s\n" "$_BREW_OUTDATED_FORMULA"
+}
+
+brew_outdated_cask() {
+    if [[ "$_BREW_OUTDATED_CASK_LOADED" -eq 0 ]] && brew_available; then
+        _BREW_OUTDATED_CASK=$(brew outdated --cask 2>/dev/null || true)
+        _BREW_OUTDATED_CASK_LOADED=1
+    fi
+    printf "%s\n" "$_BREW_OUTDATED_CASK"
+}
+
+brew_formula_installed() {
+    brew_list_formula | grep -qx "$1"
+}
+
+brew_cask_installed() {
+    brew_list_cask | grep -qx "$1"
+}
+
+brew_upgrade_package() {
+    HOMEBREW_NO_ENV_HINTS=1 run_cmd brew upgrade "$1"
+}
+
 retry() {
     local retries=$1 delay=$2; shift 2
     local cmd=("$@")

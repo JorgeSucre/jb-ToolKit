@@ -120,8 +120,8 @@ echo "Homebrew:"
 
 if brew_available; then
 
-    FORMULA_COUNT=$(brew list --formula 2>/dev/null | wc -l | tr -d ' ')
-    CASK_COUNT=$(brew list --cask 2>/dev/null | wc -l | tr -d ' ')
+    FORMULA_COUNT=$(brew_list_formula | wc -l | tr -d ' ')
+    CASK_COUNT=$(brew_list_cask | wc -l | tr -d ' ')
 
     echo "• ${FORMULA_COUNT} fórmulas"
     echo "• ${CASK_COUNT} casks"

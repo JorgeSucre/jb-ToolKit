@@ -82,8 +82,8 @@ select_optional_packages() {
 package_install_state() {
     local package="$1"
 
-    if brew list --formula "$package" >/dev/null 2>&1; then
-        if brew outdated --formula "$package" 2>/dev/null | grep -Fxq "$package"; then
+    if brew_formula_installed "$package"; then
+        if brew_outdated_formula | grep -Fxq "$package"; then
             printf "update\n"
         else
             printf "installed\n"
@@ -91,8 +91,8 @@ package_install_state() {
         return 0
     fi
 
-    if brew list --cask "$package" >/dev/null 2>&1; then
-        if brew outdated --cask "$package" 2>/dev/null | grep -Fxq "$package"; then
+    if brew_cask_installed "$package"; then
+        if brew_outdated_cask | grep -Fxq "$package"; then
             printf "update\n"
         else
             printf "installed\n"
@@ -332,9 +332,9 @@ update_external_packages() {
 
     log "⬆️ Actualizando paquetes externos..."
 
-    OUTDATED_EXTERNAL=$(brew outdated --formula 2>/dev/null || true)
+    OUTDATED_EXTERNAL=$(brew_outdated_formula)
     OUTDATED_EXTERNAL+=$'\n'
-    OUTDATED_EXTERNAL+=$(brew outdated --cask 2>/dev/null || true)
+    OUTDATED_EXTERNAL+=$(brew_outdated_cask)
 
     if [[ -z "$OUTDATED_EXTERNAL" ]]; then
         success "✔ No había paquetes externos pendientes"
@@ -354,7 +354,7 @@ update_external_packages() {
 
         echo "   • $pkg_name"
 
-        if ! HOMEBREW_NO_ENV_HINTS=1 run_cmd brew upgrade "$pkg_name"; then
+        if ! brew_upgrade_package "$pkg_name"; then
             warn "⚠️ No se pudo actualizar $pkg_name"
         fi
 
@@ -387,8 +387,8 @@ build_outdated_package_list() {
 
     TOOLKIT_OUTDATED=""
 
-    OUTDATED_FORMULAS=$(brew outdated --formula 2>/dev/null || true)
-    OUTDATED_CASKS=$(brew outdated --cask 2>/dev/null || true)
+    OUTDATED_FORMULAS=$(brew_outdated_formula)
+    OUTDATED_CASKS=$(brew_outdated_cask)
 
     append_outdated \
         "$EXPECTED_PACKAGES" \
@@ -442,7 +442,7 @@ update_toolkit_packages() {
 
         echo "   • $pkg_name"
 
-        if ! HOMEBREW_NO_ENV_HINTS=1 run_cmd brew upgrade "$pkg_name"; then
+        if ! brew_upgrade_package "$pkg_name"; then
             warn "⚠️ No se pudo actualizar $pkg_name"
         fi
 
