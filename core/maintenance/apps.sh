@@ -23,16 +23,23 @@ fi
 is_intel_only_app() {
 
     local app_path="$1"
-    local binary_info
+    local plist="$app_path/Contents/Info.plist"
+    local executable binary_info
 
-    binary_info=$(file "$app_path/Contents/MacOS/"* 2>/dev/null)
-
-    echo "$binary_info" | grep -q "x86_64" || return 1
-
-    if echo "$binary_info" | grep -q "arm64"; then
-        return 1
+    # Resolve the primary executable from Info.plist to avoid inspecting helpers
+    if [[ -f "$plist" ]]; then
+        executable=$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$plist" 2>/dev/null || true)
     fi
 
+    if [[ -n "$executable" && -f "$app_path/Contents/MacOS/$executable" ]]; then
+        binary_info=$(file "$app_path/Contents/MacOS/$executable" 2>/dev/null)
+    else
+        binary_info=$(file "$app_path/Contents/MacOS/"* 2>/dev/null)
+    fi
+
+    [[ -z "$binary_info" ]] && return 1
+    echo "$binary_info" | grep -q "x86_64" || return 1
+    echo "$binary_info" | grep -q "arm64"  && return 1
     return 0
 }
 
