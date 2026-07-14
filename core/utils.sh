@@ -265,8 +265,8 @@ generate_system_snapshot() {
 
     if brew_available; then
         brew_version="$(brew --version 2>/dev/null | head -1)"
-        formula_count="$(brew list --formula 2>/dev/null | wc -l | tr -d ' ')"
-        cask_count="$(brew list --cask 2>/dev/null | wc -l | tr -d ' ')"
+        formula_count="$(brew_list_formula | wc -l | tr -d ' ')"
+        cask_count="$(brew_list_cask | wc -l | tr -d ' ')"
     fi
 
     if command_exists fastfetch; then
