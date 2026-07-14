@@ -113,30 +113,28 @@ build_app_metadata_cache() {
             intel_only="true"
         fi
 
-        # Ranking heurístico
+        # Ranking heurístico — factores independientes con pesos calibrados
         if [[ "$APPLE_SILICON" == "true" && "$intel_only" == "true" ]]; then
-            health_score=$((health_score + 100))
+            health_score=$((health_score + 35))
         fi
 
-        if [[ "$size_mb" -ge 500 && "$age_days" -gt 30 ]]; then
+        if [[ "$size_mb" -gt 5120 ]]; then
             health_score=$((health_score + 25))
-        fi
-
-        if [[ "$size_mb" -gt 5000 ]]; then
-            health_score=$((health_score + 50))
-        elif [[ "$size_mb" -gt 1000 ]]; then
+        elif [[ "$size_mb" -gt 1024 ]]; then
             health_score=$((health_score + 10))
         fi
 
-        if [[ "$health_score" -ge 100 ]]; then
+        if [[ "$age_days" -gt 30 ]]; then
+            health_score=$((health_score + 20))
+        fi
+
+        if [[ "$health_score" -ge 70 ]]; then
             risk_level="Crítico"
-        elif [[ "$health_score" -ge 50 ]]; then
+        elif [[ "$health_score" -ge 40 ]]; then
             risk_level="Alto"
         elif [[ "$health_score" -ge 25 ]]; then
             risk_level="Medio"
-        fi
-
-        if [[ "$health_score" -lt 25 ]]; then
+        else
             continue
         fi
 
