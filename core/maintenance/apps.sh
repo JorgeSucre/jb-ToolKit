@@ -20,25 +20,6 @@ fi
 # Helpers
 # =========================
 
-app_size_mb() {
-
-    local app_path="$1"
-
-    du -sm "$app_path" 2>/dev/null \
-        | awk '{print $1}'
-}
-
-human_size() {
-
-    local size_mb="$1"
-
-    if [[ "$size_mb" -ge 1024 ]]; then
-        awk "BEGIN {printf \"%.1fGB\", $size_mb/1024}"
-    else
-        echo "${size_mb}MB"
-    fi
-}
-
 is_intel_only_app() {
 
     local app_path="$1"
@@ -89,7 +70,7 @@ build_app_metadata_cache() {
         [[ -z "$app" ]] && continue
 
         local size_mb
-        size_mb=$(app_size_mb "$app")
+        size_mb=$(dir_size_mb "$app")
 
         [[ -z "$size_mb" ]] && continue
 

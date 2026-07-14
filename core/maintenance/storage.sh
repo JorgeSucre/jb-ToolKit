@@ -13,20 +13,6 @@ LARGE_FILES_COUNT=0
 # Helpers
 # =========================
 
-human_size() {
-
-    local size_mb="$1"
-
-    if [[ "$size_mb" -ge 1024 ]]; then
-
-        awk "BEGIN {printf \"%.1fGB\", $size_mb/1024}"
-
-    else
-
-        printf "%sMB" "$size_mb"
-    fi
-}
-
 is_excluded_path() {
 
     local path="$1"
@@ -144,9 +130,7 @@ scan_large_files() {
         fi
 
         local size_mb
-
-        size_mb=$(du -sm "$file" 2>/dev/null \
-            | awk '{print $1+0}')
+        size_mb=$(dir_size_mb "$file")
 
         [[ -z "$size_mb" ]] && continue
 

@@ -35,14 +35,6 @@ has_homebrew_cleanup_candidates() {
 # Size helpers
 # =========================
 
-safe_dir_size_mb() {
-
-    local path="$1"
-
-    du -sm "$path" 2>/dev/null \
-        | awk '{print $1+0}'
-}
-
 safe_old_files_size_mb() {
 
     local path="$1"
@@ -127,13 +119,13 @@ cleanup_homebrew() {
     local before_size
     local after_size
 
-    before_size=$(safe_dir_size_mb ~/Library/Caches/Homebrew)
+    before_size=$(dir_size_mb ~/Library/Caches/Homebrew)
 
     log "🧹 Limpiando paquetes y cachés Homebrew..."
 
     run_cmd brew cleanup -s || warn "⚠️ Homebrew cleanup no pudo completarse"
 
-    after_size=$(safe_dir_size_mb ~/Library/Caches/Homebrew)
+    after_size=$(dir_size_mb ~/Library/Caches/Homebrew)
 
     HOMEBREW_MB_FREED=$((before_size - after_size))
 

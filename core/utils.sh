@@ -459,6 +459,23 @@ command_exists() {
 }
 
 # =========================
+# Shared size helpers
+# =========================
+
+dir_size_mb() {
+    du -sm "$1" 2>/dev/null | awk '{print $1+0}'
+}
+
+human_size() {
+    local size_mb="$1"
+    if [[ "$size_mb" -ge 1024 ]]; then
+        awk "BEGIN {printf \"%.1fGB\", $size_mb/1024}"
+    else
+        printf "%sMB" "$size_mb"
+    fi
+}
+
+# =========================
 # Hardware Detection
 # =========================
 
