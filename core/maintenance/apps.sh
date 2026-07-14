@@ -244,20 +244,10 @@ move_apps_to_trash() {
         return 0
     fi
 
-    IFS=',' read -ra selected <<< "$selection"
-    unset IFS
-
-    [[ ${#selected[@]} -eq 0 ]] && return 0
-
     mkdir -p ~/.Trash 2>/dev/null || true
     local moved=0
 
-    for item in "${selected[@]}"; do
-
-        item=$(echo "$item" | xargs)
-        [[ ! "$item" =~ ^[0-9]+$ ]] && continue
-
-        [[ -z "$item" ]] && continue
+    while IFS= read -r item; do
 
         local app_path="${APP_PATHS[$item]:-}"
 
@@ -281,7 +271,7 @@ move_apps_to_trash() {
             printf "⚠️ No se pudo mover %s\n" "$app_name"
         fi
 
-    done
+    done < <(parse_selection "$selection" "$APP_COUNT")
 
     if [[ "$moved" -gt 0 ]]; then
         echo ""

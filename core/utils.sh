@@ -516,6 +516,41 @@ command_exists() {
     command -v "$1" &>/dev/null
 }
 
+# parse_selection INPUT MAX
+# Expands comma-separated numbers and ranges (e.g. "1,3-5,7") into one
+# number per line.  Numbers outside [1, MAX] and invalid tokens are
+# rejected with a warning.  Backward-compatible: plain "1,2,5" still works.
+parse_selection() {
+    local input="$1" max="$2"
+    local part start end n
+
+    input="${input// /}"
+    [[ -z "$input" ]] && return 0
+
+    IFS=',' read -ra _ps_parts <<< "$input"
+    for part in "${_ps_parts[@]}"; do
+        if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            start="${BASH_REMATCH[1]}"
+            end="${BASH_REMATCH[2]}"
+            if (( start < 1 || end > max || start > end )); then
+                warn "⚠️ Rango inválido: $part"
+                continue
+            fi
+            for ((n = start; n <= end; n++)); do
+                printf "%d\n" "$n"
+            done
+        elif [[ "$part" =~ ^[0-9]+$ ]]; then
+            if (( part >= 1 && part <= max )); then
+                printf "%d\n" "$part"
+            else
+                warn "⚠️ Selección ignorada: $part"
+            fi
+        else
+            warn "⚠️ Selección ignorada: $part"
+        fi
+    done
+}
+
 # =========================
 # Shared size helpers
 # =========================

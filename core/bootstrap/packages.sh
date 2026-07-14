@@ -47,14 +47,9 @@ parse_package_selection() {
         return 0
     fi
 
-    IFS=',' read -ra choices <<< "$selection"
-    for item in "${choices[@]}"; do
-        if [[ "$item" =~ ^[0-9]+$ ]] && (( item >= 1 && item <= max )); then
-            add_selected_package "${OPTIONAL_PACKAGE_IDS[$((item - 1))]}"
-        else
-            warn "⚠️ Selección ignorada: $item"
-        fi
-    done
+    while IFS= read -r item; do
+        add_selected_package "${OPTIONAL_PACKAGE_IDS[$((item - 1))]}"
+    done < <(parse_selection "$selection" "$max")
 }
 
 select_optional_packages() {
@@ -188,16 +183,11 @@ offer_hardware_recommendations() {
             success "✔ $package seleccionado"
         done
     elif [[ -n "$selection" && "$selection" != "0" ]]; then
-        IFS=',' read -ra choices <<< "$selection"
-        for index in "${choices[@]}"; do
-            if [[ "$index" =~ ^[0-9]+$ ]] && (( index >= 1 && index <= ${#selectable_ids[@]} )); then
-                package="${selectable_ids[$((index - 1))]}"
-                add_selected_package "$package"
-                success "✔ $package seleccionado"
-            else
-                warn "⚠️ Selección ignorada: $index"
-            fi
-        done
+        while IFS= read -r index; do
+            package="${selectable_ids[$((index - 1))]}"
+            add_selected_package "$package"
+            success "✔ $package seleccionado"
+        done < <(parse_selection "$selection" "${#selectable_ids[@]}")
     fi
 }
 
