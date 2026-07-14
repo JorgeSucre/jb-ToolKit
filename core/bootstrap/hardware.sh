@@ -22,11 +22,17 @@ detect_rosetta() {
 
     ROSETTA_INSTALLED=0
 
-    if (( IS_APPLE_SILICON )); then
+    (( IS_APPLE_SILICON )) || return 0
 
-        if pgrep oahd >/dev/null 2>&1; then
-            ROSETTA_INSTALLED=1
-        fi
+    # Primary: check for the Rosetta runtime binary (fast, filesystem-only)
+    if [[ -f "/Library/Apple/usr/share/rosetta/rosetta" ]]; then
+        ROSETTA_INSTALLED=1
+        return 0
+    fi
+
+    # Fallback: query the package database (authoritative but slower)
+    if pkgutil --pkg-info com.apple.pkg.RosettaUpdateAuto >/dev/null 2>&1; then
+        ROSETTA_INSTALLED=1
     fi
 }
 
