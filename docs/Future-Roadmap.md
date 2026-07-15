@@ -23,21 +23,24 @@ designs — no implementation details are prescribed here.
 
 ## Planned (not implemented — do not document as existing)
 
-| Goal | Intent |
-|---|---|
-| **Deployment system** | Push complete configurations to a prepared Mac in one operation |
-| **Reusable Bundles** | Named package/config groups that can be applied as units |
-| **Workstation Profiles** | Role-based machine definitions (e.g., office, creative, dev) composed of bundles |
-| **JB Picks** | Curated recommended-apps catalog maintained by JB Repair |
-| **Application Catalog** | Structured metadata for installable apps beyond the flat Brewfile |
-| **Plugin-like architecture** | Third-party/module extension points without touching core |
-| **Cross-platform readiness** | Isolate macOS-specific calls so future non-macOS targets are feasible |
-| **Improved reporting** | Richer PDF, historical trends, comparison between visits |
+| Goal | Intent | Status |
+|---|---|---|
+| **Deployment system** | Push complete configurations to a prepared Mac in one operation | Designed ([Deployment-Design.md](Deployment-Design.md)); catalog data scaffolded; **no code** |
+| **Reusable Bundles** | Named package groups applied as units | Data contract + files exist ([Catalog-Format.md](Catalog-Format.md)); no loader |
+| **Workstation Profiles** | Role-based machine definitions composed of bundles | Data contract + files exist; no loader |
+| **JB Picks** | Curated recommendations with mandatory reasoning | Metadata on application records; browser UI pending |
+| **Application Catalog** | Structured per-app metadata beyond the flat Brewfile | Directory-per-application scaffolded; validator pending |
+| **Vendor presets** | Per-organization compositions of profiles | Reserved space only (`catalog/vendors/`) — not designed yet |
+| **Plugin-like architecture** | Third-party/module extension points without touching core | Idea only |
+| **Cross-platform readiness** | Isolate macOS-specific calls so future non-macOS targets are feasible | Idea only |
+| **Improved reporting** | Richer PDF, historical trends, comparison between visits | Idea only |
 
-Architectural note for implementers: the existing seams for this work are the
-Brewfile-variant selection (`select_brewfile`), the optional-package catalog arrays
-(`OPTIONAL_PACKAGE_IDS`/`LABELS`), and the machine-family recommendation matrix.
-Bundles/profiles should generalize these, not bypass them.
+Architectural note for implementers: the deployment installation engine is the
+**existing Bootstrap machinery** (temp Brewfile + `brew bundle` + retry + verify) —
+Deployment resolves data and orchestrates; it never installs on its own. The other
+existing seams remain the Brewfile-variant selection (`select_brewfile`), the
+optional-package arrays (`OPTIONAL_PACKAGE_IDS`/`LABELS`), and the machine-family
+recommendation matrix.
 
 ## Potential Future Improvements
 

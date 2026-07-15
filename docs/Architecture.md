@@ -13,6 +13,8 @@ jb-ToolKit/
 ├── brewfile                # Package manifest (Brewfile format)
 ├── README.md               # User-facing documentation (Spanish)
 ├── docs/                   # Engineering documentation (this directory)
+├── catalog/                # Deployment data: applications/bundles/profiles (+ reserved vendors/)
+│                           #   Pure data — no code parses it yet (Deployment Phases 3–5 pending)
 ├── logs/                   # Runtime artifacts: state.env, session logs, snapshots, PDFs
 └── core/
     ├── utils.sh            # Foundation layer — sourced by every module

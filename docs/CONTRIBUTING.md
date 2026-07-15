@@ -163,9 +163,16 @@ space only, confirmed counts only, cloud-synced paths excluded.
 `state.env` and the session log). Threshold-based summary lines follow the existing
 tier pattern.
 
-**Deployment bundles** — bundles reference application IDs from the catalog; profiles
-reference bundle IDs. Never define a package inline in a profile, and never define
-the same application twice. See [Deployment-Design.md](Deployment-Design.md).
+**Deployment catalog** — the catalog is data, governed by the contracts in
+[Catalog-Format.md](Catalog-Format.md). The rules that matter most: an application
+is a **directory** (`catalog/applications/<id>/app.conf`) so it can grow assets
+later; a Homebrew package name exists in exactly **one** `app.conf` line; bundles
+reference application IDs; profiles reference bundle IDs and place themselves in the
+menu via `CATEGORY`/`SUBCATEGORY` — menus regenerate from data, never from code.
+`JB_PICK=true` without a `JB_PICK_NOTE` is invalid: a recommendation without its
+reasoning is just a favorite. Keep every file flat `KEY=value`, human-editable in
+any text editor — no YAML, no JSON, no SQLite. See
+[Deployment-Design.md](Deployment-Design.md) for the architecture.
 
 ## Testing expectations
 

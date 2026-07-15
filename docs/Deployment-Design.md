@@ -1,15 +1,38 @@
 # Deployment — Design Document
 
-Status: **DESIGN — not implemented.** This document is the agreed blueprint for the
-Deployment module. Implementation follows the phased plan at the end; no phase begins
-until this design is approved.
+Status: **DESIGN APPROVED — Phase 2 delivered (documentation + catalog data).**
+No installation code exists yet. Implementation follows the phased plan at the end.
 
 ## Thesis
 
 **JB Toolkit prepares complete computers.** Deployment turns "set up this Mac for a
 developer" into one decision, not forty. It is *not* a package manager — Homebrew is
-the package manager. Deployment is the layer that knows what a JB Repair workstation
-looks like and compiles that knowledge down to the proven Bootstrap machinery.
+the package manager, and Bootstrap owns the installation machinery. Deployment is the
+layer that knows what a JB Repair workstation looks like and compiles that knowledge
+down to the engine that already exists.
+
+## Deployment is an orchestration layer — never an installer
+
+This is the load-bearing constraint of the whole design:
+
+```
+Profile
+    ↓
+Bundle Resolution
+    ↓
+Application Resolution
+    ↓
+Temporary Brewfile
+    ↓
+Bootstrap Installation Engine  (brew bundle + retry + verify — unchanged)
+```
+
+Deployment's entire responsibility is **resolving data and orchestrating execution**.
+It never talks to Homebrew directly for installation; it produces a temporary
+Brewfile and hands it to the same proven pattern Bootstrap uses
+(`retry 3 5 run_cmd --visible brew bundle`, post-run verification,
+`brew_cache_reset`). If Deployment ever grows an installation code path of its own,
+the design has been violated.
 
 ## Goals and non-goals
 
@@ -18,7 +41,8 @@ looks like and compiles that knowledge down to the proven Bootstrap machinery.
 | One profile choice prepares a whole machine | Browsing/searching dozens of apps |
 | Reusable bundles, zero duplicated package definitions | A second package database competing with Brewfiles |
 | Curated JB Picks integrated into the same data | Ratings/reviews UI, app store aesthetics |
-| Hardware-aware filtering (arch, macOS version) | Cross-platform support (future goal, isolated seams only) |
+| Hardware-aware filtering (arch, macOS version) with visible skips | Cross-platform support (future goal; isolated seams only) |
+| Menus generated from catalog data | Hardcoded menu logic per profile |
 | Same architectural rules as every other module | New abstractions: no plugin system, no config framework |
 
 ## Architectural position
@@ -39,175 +63,178 @@ graph TD
     STATE -.-> REP
 ```
 
-All existing rules apply unchanged:
+All existing rules apply unchanged: child process under the launcher,
+standalone-capable via the `init_session` guard, zero dependencies on other modules,
+results to Report through `state.env` only. It reuses the foundation as-is:
+`run_cmd`, session logging, `ask_yes_no`, `parse_selection`, the Homebrew layer, and
+hardware primitives.
 
-- Child process under the launcher; standalone-capable via the `init_session` guard.
-- No dependency on any other module. Results flow to Report through `state.env` only.
-- Reuses the foundation as-is: `run_cmd`, session logging, `ask_yes_no`,
-  `parse_selection`, the Homebrew layer (`brew_available`, query cache,
-  `brew_cache_reset`), and hardware primitives (`get_arch`, `get_device_profile`).
-
-Planned file layout (mirrors the bootstrap/maintenance pattern):
+Planned code layout (Phases 3–5; mirrors the bootstrap/maintenance pattern):
 
 ```
-core/deployment.sh              # Orchestrator: menu → resolve → confirm → install → verify
+core/deployment.sh              # Orchestrator: menu → resolve → confirm → hand off → verify
 core/deployment/
     catalog.sh                  # Load/validate applications, bundles, profiles
     resolve.sh                  # Profile → bundles → app IDs → filtered install set
-    install.sh                  # Compile to temp Brewfile, run bundle, verify
+    install.sh                  # Compile temp Brewfile; invoke the Bootstrap engine; verify
+```
+
+## The catalog
+
+Four directories; three active layers plus one reserved:
+
+```
 catalog/
-    applications/               # One file per application (metadata)
-    bundles/                    # One file per bundle (app ID list)
-    profiles/                   # One file per profile (bundle ID list)
+├── README.md                   # Technician quick-start
+├── applications/               # One DIRECTORY per application
+│   └── openlogi/
+│       └── app.conf            # Metadata (the only required file)
+├── bundles/                    # One file per bundle (app ID list)
+├── profiles/                   # One file per profile (bundle ID list + placement)
+└── vendors/                    # RESERVED — future deployment presets (see below)
 ```
 
-## Data model — the catalog
+Normative field-by-field contracts, parsing rules, and validation rules live in
+**[Catalog-Format.md](Catalog-Format.md)**. The essentials:
 
-Three layers, strictly referential: **profiles reference bundles; bundles reference
-applications; applications define packages.** A package name appears in exactly one
-place in the repository.
+### The directory is the application
 
-```mermaid
-graph LR
-    P[profiles/*.profile<br/>BUNDLES=ids] --> B[bundles/*.bundle<br/>one app ID per line]
-    B --> A[applications/*.conf<br/>ID, CASK/BREW, metadata]
-    A --> HB[Homebrew package names]
-```
-
-File formats follow the `state.env` convention — flat `KEY=value`, parseable with
-the same awk pattern as `state_value`. No YAML, no JSON, no new parsers.
-
-### Application (`catalog/applications/<id>.conf`)
+Each application is a **directory**, not a file: `catalog/applications/<id>/` with
+`app.conf` inside. Today `app.conf` is the only file; the directory deliberately
+leaves room for future per-app assets — `README.md`, icons, screenshots, localized
+descriptions, release notes, compatibility notes — without ever redesigning the
+catalog. Tools must therefore resolve applications by directory and read
+`<id>/app.conf`, never glob for `*.conf` files at the top level.
 
 ```bash
-# catalog/applications/keka.conf
-ID=keka
-NAME=Keka
-CASK=keka                    # or BREW=<formula> — exactly one of the two
-DESCRIPTION=Compresor y descompresor moderno y ligero
-CATEGORIES=utilities
-JB_PICK=5                    # 1–5; omit when not a JB Pick
-JB_PICK_NOTE=Reemplazo moderno de The Unarchiver
-ARCHS=arm64 x86_64           # omit = all architectures
-MIN_MACOS=12                 # omit = any supported macOS
-RECOMMENDED=true             # surfaced first in Custom flow; omit = false
-```
-
-```bash
-# catalog/applications/openlogi.conf
+# catalog/applications/openlogi/app.conf
 ID=openlogi
 NAME=OpenLogi
 CASK=openlogi
 DESCRIPTION=Reemplazo open-source moderno de Logitech Options+
 CATEGORIES=utilities drivers
-JB_PICK=5
-JB_PICK_NOTE=Recomendado tras años de soporte con periféricos Logitech
+JB_PICK=true
+JB_PICK_NOTE=Nativo, ligero y sin cuenta requerida. Reemplaza Logi Options+ tras años de problemas de soporte.
 ```
 
-Field semantics:
+Files remain **human-editable, shell-friendly flat `KEY=value`** — the `state.env`
+convention, parseable with the same awk pattern as `state_value`. No YAML, no JSON,
+no SQLite, ever. A technician with a text editor is a first-class catalog author.
 
-| Field | Required | Meaning |
-|---|---|---|
-| `ID` | yes | Kebab-case, must equal the filename stem |
-| `NAME` | yes | Display name (Spanish UI uses it as-is) |
-| `BREW` / `CASK` | exactly one | The Homebrew package — the **single source of truth** |
-| `DESCRIPTION` | yes | One line, Spanish, shown in confirmation and JB Picks |
-| `CATEGORIES` | no | Space-separated tags (informational + Custom flow grouping) |
-| `JB_PICK` / `JB_PICK_NOTE` | no | Curation rating and the "why" — see JB Picks |
-| `ARCHS` | no | Space-separated `uname -m` values; installer skips incompatible |
-| `MIN_MACOS` | no | Major version; installer skips older systems |
-| `RECOMMENDED` | no | Ordering hint inside Custom selection |
+### Strictly referential layers
 
-### Bundle (`catalog/bundles/<id>.bundle`)
+**Profiles reference bundles; bundles reference applications; applications define
+packages.** A Homebrew package name appears in exactly one place in the repository —
+the `BREW=` or `CASK=` line of one `app.conf`. Profiles never name packages; bundles
+never carry package metadata; everything resolves through application IDs.
 
-One application ID per line; `#` comments; first comment line is the display name.
+```mermaid
+graph LR
+    V[vendors/ — reserved<br/>future presets] -.->|will compose| P
+    P[profiles/*.profile<br/>CATEGORY + BUNDLES] --> B[bundles/*.bundle<br/>one app ID per line]
+    B --> A[applications/id/app.conf<br/>BREW or CASK + metadata]
+    A --> HB[Homebrew package names]
+```
+
+## Hierarchical navigation — menus from data
+
+Profiles place **themselves** in the menu tree with two keys:
 
 ```bash
-# JB Essentials
-appcleaner
-keka
-rectangle
-stats
-pdfgear
-openlogi
+# catalog/profiles/creative.profile
+NAME=Creative
+DESCRIPTION=Estación de trabajo para diseño y multimedia
+CATEGORY=Professional
+SUBCATEGORY=Creative
+ORDER=20
+BUNDLES=jb-essentials productivity media
 ```
 
-```bash
-# Developer Bundle
-git
-visual-studio-code
-node
-pnpm
-docker
+Rendering contract (the UI has **no** profile-specific logic):
+
+1. Menu level 1 lists the distinct `CATEGORY` values, ordered by `ORDER`
+   (then alphabetically), plus the fixed entries `Custom` and `JB Picks`.
+2. Selecting a category containing **exactly one profile without `SUBCATEGORY`**
+   selects that profile directly — single-profile categories collapse to leaves.
+3. Selecting a category with multiple profiles opens a submenu listing them by
+   `SUBCATEGORY` (falling back to `NAME`), ordered the same way.
+4. Maximum depth is two levels (`CATEGORY` → `SUBCATEGORY`). Growth beyond ~7 items
+   at any level is handled by adding categories, not by deeper nesting.
+
+The initial tree, generated entirely from the profile files below:
+
+```
+Deployment                      Professional
+============================    ============================
+¿Qué tipo de equipo             ¿Qué perfil profesional?
+ preparamos?
+                                1) Business
+1) Home                         2) Creative
+2) Office                       3) Engineering
+3) Professional …               4) Education
+4) Technician                   0) Volver
+5) Developer
+6) Custom
+7) JB Picks ⭐
+0) Volver
 ```
 
-```bash
-# Networking Bundle
-tailscale
-wireshark
-nmap
-angry-ip-scanner
-```
-
-### Profile (`catalog/profiles/<id>.profile`)
-
-```bash
-# catalog/profiles/developer.profile
-NAME=Developer
-DESCRIPTION=Estación de trabajo para desarrollo de software
-BUNDLES=jb-essentials developer
-```
-
-```bash
-# catalog/profiles/engineering.profile
-NAME=Engineering
-DESCRIPTION=Perfil profesional para ingeniería
-GROUP=professional
-BUNDLES=jb-essentials productivity engineering
-```
-
-`GROUP` is the one nesting mechanism: profiles without a group appear on the
-Deployment menu; grouped profiles appear on their group's submenu. This keeps every
-menu ≤ 7 items with **data, not code** — adding a profile never means editing a menu.
-
-Initial catalog (from the product definition):
-
-| Menu level 1 | Menu level 2 (`GROUP=professional`) |
-|---|---|
-| Home | Business |
-| Office | Creative |
-| Professional → | Engineering |
-| Technician | Education |
-| Developer | |
-| Custom | |
-
-Profile → bundle composition (no package appears twice anywhere):
-
-| Profile | Bundles |
-|---|---|
-| Developer | JB Essentials + Developer |
-| Office | JB Essentials + Productivity |
-| Technician | JB Essentials + Networking |
-| Home | JB Essentials |
-| Business / Creative / Engineering / Education | JB Essentials + Productivity + one specialty bundle |
+`Home`, `Office`, `Technician`, and `Developer` are single-profile categories
+(collapse rule); `Professional` fans out. When Developer later splits into Web /
+Python / DevOps, that happens by **adding profile files** with
+`CATEGORY=Developer` + `SUBCATEGORY=…` — zero menu code changes. `Custom` is a UI
+flow (compose bundles via `parse_selection`), not a profile file.
 
 ## JB Picks
 
-JB Picks is **curation data, not a data store**. The rating lives on the application
-record (`JB_PICK`, `JB_PICK_NOTE`) — there is no separate picks list to drift out of
-sync. Two integration points:
+JB Picks is **curation metadata on the application record** — `JB_PICK=true` plus a
+mandatory `JB_PICK_NOTE`. There is no separate picks database to drift out of sync.
 
-1. **A read-only showcase screen** (reached from the Deployment menu): applications
-   with `JB_PICK` set, sorted by rating, displayed as
-   `★★★★★ OpenLogi — Reemplazo open-source moderno de Logitech Options+` with the
-   curation note. It answers one question: *what does JB Repair actually recommend,
-   and why.* No installation happens from this screen; it exists to build trust in
-   the bundles.
-2. **The JB Essentials bundle** is the operational form of the five-star picks —
-   the picks integrate with deployment *through* a bundle, like everything else.
+**Validity rule:** a pick without a justification is invalid. The Phase 3 catalog
+validator rejects any `app.conf` with `JB_PICK=true` and a missing or empty
+`JB_PICK_NOTE`. These are recommendations earned through years of supporting
+customers, not favorites; the note — *why JB Repair recommends this* — is the
+product.
 
-The `JB_PICK_NOTE` is required when `JB_PICK` is set: a pick without a reason is a
-favorite, not a recommendation. Years-of-support rationale is the product.
+Two purposes, one data source:
+
+1. **Operational** — picks ship inside bundles like JB Essentials, installed through
+   the normal resolution pipeline. Nothing special-cased.
+2. **Educational** — a read-only **JB Picks browser** on the Deployment menu renders
+   each pick with its reasoning:
+
+   ```
+   JB Picks ⭐
+   ----------------------------------------
+   ★★★★★ OpenLogi
+      Reemplazo open-source moderno de Logitech Options+.
+      Nativo, ligero y sin cuenta requerida.
+
+   ★★★★★ PDFgear
+      Editor PDF gratuito y completo.
+      Cubre la mayoría de casos sin licencia de Acrobat.
+
+   ★★★★★ Rectangle
+      Gestión de ventanas con atajos de teclado.
+   ```
+
+   No installation happens from this screen. It answers exactly one question — *what
+   does JB Repair actually recommend, and why* — and exists to build trust in the
+   bundles. All picks render ★★★★★: either JB Repair stands behind an app or it
+   isn't a pick. There are no three-star recommendations.
+
+## The vendor layer (reserved, not implemented)
+
+`catalog/vendors/` is **reserved architectural space** for future deployment
+presets: named compositions of profiles for specific organizations — JB Repair's own
+defaults, Business, Education, LCS, individual clients. A vendor will compose
+existing profiles without modifying the catalog itself (the same relationship
+profiles have to bundles, one level up).
+
+Phase 2 ships only a `README.md` placeholder documenting this intent. No vendor
+parsing, no vendor menus, no vendor keys — the directory exists so that when the
+need arrives, it lands in prepared ground instead of forcing a catalog redesign.
+Do not build against this layer until it is designed for real.
 
 ## Resolution and installation pipeline
 
@@ -215,80 +242,59 @@ favorite, not a recommendation. Years-of-support rationale is the product.
 flowchart TD
     A[User picks profile] --> B[resolve: profile → bundle IDs → app IDs<br/>deduplicate, preserve order]
     B --> C[Validate: every referenced ID exists<br/>missing ID = fatal, name the file]
-    C --> D[Filter: ARCHS vs uname -m,<br/>MIN_MACOS vs sw_vers<br/>skips are listed, never silent]
+    C --> D[Filter: ARCHS vs uname -m,<br/>MIN_MACOS vs sw_vers<br/>every skip listed with its reason]
     D --> E[Partition: already installed vs to-install<br/>via cached brew_list queries]
-    E --> F[Confirmation screen:<br/>bundles, app count, skips, size of work]
+    E --> F[Confirmation screen:<br/>bundles, counts, named skips]
     F -->|no| G([Clean exit — nothing touched])
-    F -->|yes| H[Compile temp Brewfile from BREW/CASK fields<br/>same /tmp pattern as bootstrap]
-    H --> I[retry 3 5 run_cmd --visible brew bundle]
-    I --> J[brew_cache_reset<br/>re-query brew list]
-    J --> K[Verify per app: confirmed installed?<br/>report exact successes and failures]
+    F -->|yes| H[Compile temp Brewfile from BREW/CASK fields]
+    H --> I[Hand off to the Bootstrap engine:<br/>retry 3 5 run_cmd --visible brew bundle]
+    I --> J[brew_cache_reset → re-query brew list]
+    J --> K[Per-app verification:<br/>confirmed installed, or named failure]
     K --> L[write_state_values:<br/>DEPLOYED_PROFILE, LAST_DEPLOYMENT,<br/>DEPLOYMENT_APPS_INSTALLED,<br/>DEPLOYMENT_APPS_FAILED]
 ```
 
-Design decisions worth naming:
+## Truthfulness
 
-- **The installation engine is the Bootstrap engine.** Deployment compiles the
-  resolved set into a temporary Brewfile and reuses the proven
-  `brew bundle` + retry + verify pattern. No new installer, no per-package loops to
-  get wrong. (The shared helpers this needs from `bootstrap/brew.sh` are promoted to
-  `utils.sh` only if Phase 5 shows they're needed verbatim — per the consolidation
-  rule.)
-- **Truthful accounting, as audited.** After `brew bundle`, the module re-queries
-  Homebrew (post-`brew_cache_reset`) and reports *confirmed* installs. "Instaladas:
-  12 de 13" with the failure named beats a blanket success. State keys record
-  confirmed counts only.
-- **Filtering is visible.** An app skipped for architecture or macOS version is
-  listed on the confirmation screen ("Omitidas por compatibilidad: …"), honoring the
-  no-silent-behavior principle.
-- **Custom profile** reuses `parse_selection` over the bundle list (≤ 7 bundles per
-  screen) — the user composes bundles, never individual apps. Composing apps is what
-  the Bootstrap optional-packages flow already offers.
+The audited invariant carries over whole: **never silently skip; never report
+estimates; always report verified outcomes.**
 
-## User experience
+- An incompatible application is displayed at confirmation time with its reason —
+  before the user commits, not buried in a log.
+- After `brew bundle`, the module re-queries Homebrew (post-`brew_cache_reset`) and
+  verifies **each application individually**. The result screen names everything:
 
-Every screen answers exactly one question. Depth over breadth; no menu exceeds ~7
-visible items; navigation feel matches the existing launcher.
+  ```
+  Resultado del despliegue
+  ----------------------------------------
+  Instaladas: 12 de 13
 
-```
-JB Toolkit                      Deployment                    Professional
-==============================  ============================  ============================
-1) Initial Setup                ¿Qué tipo de equipo           ¿Qué perfil profesional?
-2) Diagnostics (Scan System)     preparamos?
-3) Maintenance (Fix Issues)                                   1) Business
-4) Deployment (Prepare Mac)     1) Home                       2) Creative
-5) Report (Export Results)      2) Office                     3) Engineering
-6) Exit                         3) Professional …             4) Education
-                                4) Technician                 0) Volver
-                                5) Developer
-                                6) Custom
-                                7) JB Picks ⭐
-                                0) Volver
-```
+  Omitidas por compatibilidad:
+     • OpenLogi — requiere macOS 15+
 
-Confirmation is the only dense screen, and it is a summary, not a list of forty
-apps:
+  Fallidas:
+     • Docker Desktop — descarga interrumpida
 
-```
-Perfil: Developer
-----------------------------------------
-• JB Essentials        6 aplicaciones
-• Developer Bundle     5 aplicaciones
+  Ya estaban instaladas: 2
+  ```
 
-Nuevas: 9   Ya instaladas: 2   Omitidas por compatibilidad: 0
+- State keys record **confirmed** counts only. A blanket "✔ Perfil desplegado" with
+  a hidden failure is a design violation, not a cosmetic bug.
 
-¿Preparar este equipo? (y/n):
-```
+## User experience rules
 
-The result screen mirrors maintenance's executive summary: confirmed counts, named
-failures, elapsed time, `print_completion`. Report picks up the state keys and shows
-"Perfil desplegado: Developer" alongside the existing sections.
+- No menu exceeds roughly 7 visible entries.
+- Every screen answers exactly one question.
+- Depth over breadth: users navigate categories → profiles (→ bundles in Custom).
+- **Individual applications appear only at the final confirmation stage** — never as
+  a browsing surface. The one exception is the read-only JB Picks browser, which is
+  educational, not operational.
+- The experience is a deployment utility, not a package manager.
 
-The launcher menu grows to six items (Deployment inserted before Report). A Settings
-entry appears in the long-term product sketch but is **out of scope** for this design
-— nothing here needs it, and menus don't grow speculatively.
+The launcher menu grows to six items (Deployment inserted before Report). A future
+Settings entry appears in the long-term product sketch but is out of scope — menus
+don't grow speculatively.
 
-## New state keys
+## New state keys (land in Phase 5)
 
 | Key | Meaning |
 |---|---|
@@ -297,21 +303,22 @@ entry appears in the long-term product sketch but is **out of scope** for this d
 | `DEPLOYMENT_APPS_INSTALLED` | **Confirmed** newly-installed count |
 | `DEPLOYMENT_APPS_FAILED` | Count of apps that did not verify after bundle |
 
-(Added to the State-System key inventory when Phase 5 lands.)
+Report will display "Perfil desplegado: <NAME>" alongside its existing sections.
+Keys get added to the [State-System.md](State-System.md) inventory when they land.
 
 ## Phased implementation plan
 
-Each phase is independently shippable, reviewable, and leaves the toolkit fully
-working. No phase begins before the previous one is merged.
+Each phase is independently shippable and leaves the toolkit fully working. No phase
+begins before the previous one is reviewed.
 
-| Phase | Deliverable | Proof it works |
+| Phase | Deliverable | Status |
 |---|---|---|
-| **1 — Foundations** *(this document)* | `CONTRIBUTING.md`; this design; agreed file formats | Design review |
-| **2 — Catalog data** | `catalog/` populated: application records (with JB Picks metadata), the initial bundles, the eight profiles. Pure data — no code | Files validate against the format spec by inspection |
-| **3 — Loaders** | `core/deployment/catalog.sh` + `resolve.sh`: parse, validate (dangling IDs, duplicate IDs, BREW/CASK exclusivity), resolve profile → filtered app set | A `--validate` invocation that walks the whole catalog and reports; run in CI-less fashion via `bash -n` + manual run |
-| **4 — Interactive module** | `core/deployment.sh` menus (profiles, groups, Custom, JB Picks showcase) wired into the `jb` launcher; ends at the confirmation screen with a "installation engine pending" notice | Full navigation on a real machine; decline paths clean |
-| **5 — Installation engine** | `install.sh`: Brewfile compilation, `brew bundle` execution, post-verification, state keys, Report integration | End-to-end deployment on a test Mac; session log shows CMD/EXIT evidence; Report displays the new keys |
+| **1 — Foundations** | CONTRIBUTING.md; this design | ✅ Delivered |
+| **2 — Contracts + data** | [Catalog-Format.md](Catalog-Format.md) data contracts; `catalog/` scaffolded: application directories, bundles, profiles, vendor placeholder; resolution diagrams; doc updates. **Pure documentation and data — no code** | ✅ Delivered |
+| **3 — Loaders** | `core/deployment/catalog.sh` + `resolve.sh`: parse, validate (dangling IDs, duplicate IDs, BREW/CASK exclusivity, JB_PICK note rule), resolve profile → filtered app set; a `--validate` mode that walks the whole catalog | Pending |
+| **4 — Interactive module** | `core/deployment.sh` menus generated from the catalog hierarchy (categories, subcategories, Custom, JB Picks browser) wired into the `jb` launcher; ends at the confirmation screen with an "installation engine pending" notice | Pending |
+| **5 — Installation engine** | `install.sh`: Brewfile compilation, hand-off to the Bootstrap engine pattern, per-app verification, state keys, Report integration | Pending |
 
-Risk containment: phases 2–3 touch nothing the user can reach; phase 4 is reachable
-but inert; only phase 5 mutates a system, and it lands on machinery (bundle + retry +
-verify) that Bootstrap has already proven in production.
+Risk containment: Phase 2 is inert data; Phase 3 touches nothing the user can reach;
+Phase 4 is reachable but cannot mutate a system; only Phase 5 installs, and it lands
+on machinery Bootstrap has already proven in production.
