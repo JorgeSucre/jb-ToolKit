@@ -231,7 +231,7 @@ sync_brewfile() {
 
     echo ""
 
-    if retry 2 5 run_cmd --visible "$BREW_BIN" bundle --file="$TEMP_BREWFILE"; then
+    if retry 3 5 run_cmd --visible "$BREW_BIN" bundle --file="$TEMP_BREWFILE"; then
 
         success "✔ Brewfile sincronizado correctamente"
 

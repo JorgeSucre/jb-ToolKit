@@ -67,7 +67,7 @@ save_maintenance_state() {
         "LAST_MODULE=maintenance" \
         "LAST_DURATION=${ELAPSED:-0}" \
         "ARCH=$(uname -m)" \
-        "JB_VERSION=0.9"
+        "JB_VERSION=$JB_VERSION"
 
     log "📁 Estado guardado correctamente"
 }
