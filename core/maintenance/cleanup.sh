@@ -154,12 +154,15 @@ cleanup_caches() {
         return 0
     fi
 
-    CACHE_FILES_REMOVED="$CACHE_FILE_COUNT"
-
     find ~/Library/Caches \
         -type f \
         -mtime +7 \
         -delete 2>/dev/null || true
+
+    local remaining
+    remaining=$(find ~/Library/Caches -type f -mtime +7 2>/dev/null | wc -l | tr -d ' ')
+    CACHE_FILES_REMOVED=$(( CACHE_FILE_COUNT - remaining ))
+    [[ "$CACHE_FILES_REMOVED" -lt 0 ]] && CACHE_FILES_REMOVED=0
 
     [[ "$CACHE_MB_FREED" -lt 0 ]] && CACHE_MB_FREED=0
 
@@ -184,12 +187,15 @@ cleanup_logs() {
         return 0
     fi
 
-    LOG_FILES_REMOVED="$LOG_FILE_COUNT"
-
     find ~/Library/Logs \
         -type f \
         -mtime +14 \
         -delete 2>/dev/null || true
+
+    local remaining
+    remaining=$(find ~/Library/Logs -type f -mtime +14 2>/dev/null | wc -l | tr -d ' ')
+    LOG_FILES_REMOVED=$(( LOG_FILE_COUNT - remaining ))
+    [[ "$LOG_FILES_REMOVED" -lt 0 ]] && LOG_FILES_REMOVED=0
 
     [[ "$LOG_MB_FREED" -lt 0 ]] && LOG_MB_FREED=0
 
@@ -214,12 +220,15 @@ cleanup_trash() {
         return 0
     fi
 
-    TRASH_FILES_REMOVED="$TRASH_FILE_COUNT"
-
     find ~/.Trash \
         -mindepth 1 \
         -mtime +7 \
         -exec rm -rf {} + 2>/dev/null || true
+
+    local remaining
+    remaining=$(find ~/.Trash -mindepth 1 -mtime +7 2>/dev/null | wc -l | tr -d ' ')
+    TRASH_FILES_REMOVED=$(( TRASH_FILE_COUNT - remaining ))
+    [[ "$TRASH_FILES_REMOVED" -lt 0 ]] && TRASH_FILES_REMOVED=0
 
     [[ "$TRASH_MB_FREED" -lt 0 ]] && TRASH_MB_FREED=0
 
