@@ -445,34 +445,48 @@ _BREW_LIST_CASK_LOADED=0
 _BREW_OUTDATED_FORMULA_LOADED=0
 _BREW_OUTDATED_CASK_LOADED=0
 
+# A transient brew failure must not poison the session: the cache is only
+# marked loaded when the query succeeded, so the next call retries.
 brew_list_formula() {
     if [[ "$_BREW_LIST_FORMULA_LOADED" -eq 0 ]] && brew_available; then
-        _BREW_LIST_FORMULA=$(brew list --formula 2>/dev/null || true)
-        _BREW_LIST_FORMULA_LOADED=1
+        if _BREW_LIST_FORMULA=$(brew list --formula 2>/dev/null); then
+            _BREW_LIST_FORMULA_LOADED=1
+        else
+            _BREW_LIST_FORMULA=""
+        fi
     fi
     printf "%s\n" "$_BREW_LIST_FORMULA"
 }
 
 brew_list_cask() {
     if [[ "$_BREW_LIST_CASK_LOADED" -eq 0 ]] && brew_available; then
-        _BREW_LIST_CASK=$(brew list --cask 2>/dev/null || true)
-        _BREW_LIST_CASK_LOADED=1
+        if _BREW_LIST_CASK=$(brew list --cask 2>/dev/null); then
+            _BREW_LIST_CASK_LOADED=1
+        else
+            _BREW_LIST_CASK=""
+        fi
     fi
     printf "%s\n" "$_BREW_LIST_CASK"
 }
 
 brew_outdated_formula() {
     if [[ "$_BREW_OUTDATED_FORMULA_LOADED" -eq 0 ]] && brew_available; then
-        _BREW_OUTDATED_FORMULA=$(brew outdated --formula 2>/dev/null || true)
-        _BREW_OUTDATED_FORMULA_LOADED=1
+        if _BREW_OUTDATED_FORMULA=$(brew outdated --formula 2>/dev/null); then
+            _BREW_OUTDATED_FORMULA_LOADED=1
+        else
+            _BREW_OUTDATED_FORMULA=""
+        fi
     fi
     printf "%s\n" "$_BREW_OUTDATED_FORMULA"
 }
 
 brew_outdated_cask() {
     if [[ "$_BREW_OUTDATED_CASK_LOADED" -eq 0 ]] && brew_available; then
-        _BREW_OUTDATED_CASK=$(brew outdated --cask 2>/dev/null || true)
-        _BREW_OUTDATED_CASK_LOADED=1
+        if _BREW_OUTDATED_CASK=$(brew outdated --cask 2>/dev/null); then
+            _BREW_OUTDATED_CASK_LOADED=1
+        else
+            _BREW_OUTDATED_CASK=""
+        fi
     fi
     printf "%s\n" "$_BREW_OUTDATED_CASK"
 }
