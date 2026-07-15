@@ -48,32 +48,20 @@ text logs/session_YYYY-MM-DD_HH-MM-SS.log logs/system_snapshot_YYYY-MM-DD_HH-MM-
 
 ## 🧠 Recomendaciones según hardware
 
-JB Toolkit detecta automáticamente el equipo y adapta sus recomendaciones.
+JB Toolkit detecta automáticamente el equipo y ofrece aplicaciones recomendadas
+según el modelo, definidas como datos en el catálogo:
 
-Ejemplos:
-
-### MacBook Air
+### MacBook Air / MacBook Pro
 
 - AlDente
-- ChatGPT
-- Microsoft Office
-- OneDrive
 
-### Mac mini
+### MacBook Pro, Mac mini, Mac Studio e iMac
 
-- BetterDisplay
 - Macs Fan Control
-- Tailscale
-- Herramientas de productividad
 
-### Equipos con pantallas externas
+### Mac mini, Mac Studio y equipos con pantallas externas
 
 - BetterDisplay
-
-### Equipos compatibles con Android
-
-- Android Platform Tools
-- OpenJDK
 
 ---
 
@@ -152,15 +140,15 @@ El launcher:
 
 ## 1. Bootstrap
 
-Configura el sistema automáticamente:
+Asistente de preparación inicial del equipo:
 
-- Homebrew
-- Herramientas esenciales
-- Aplicaciones recomendadas
-- Dependencias técnicas
-- Configuración inicial
-
-Además permite instalar aplicaciones opcionales mediante selección interactiva.
+- Command Line Tools y Homebrew
+- Herramientas base verificadas (fastfetch)
+- Actualización opcional de paquetes pendientes
+- Detección de hardware y recomendaciones según el modelo
+- Asistente de despliegue: una pregunta — ¿cómo se usará este Mac? — y el
+  resto lo resuelve el módulo Deployment (mismo catálogo, mismo planificador,
+  mismo instalador)
 
 ---
 
@@ -200,10 +188,17 @@ Prepara equipos completos mediante perfiles de trabajo:
 
 - Perfiles por tipo de equipo: Home, Office, Professional, Technician, Developer
 - Bundles reutilizables de aplicaciones seleccionadas por JB Repair
+- Personalización por bundle: instalar todo, elegir aplicaciones una a una,
+  u omitir el bundle completo
 - JB Picks: recomendaciones curadas con su justificación
 - Perfil personalizado combinando bundles
-- Revisión completa del plan antes de cualquier cambio
-- Instalación con verificación por aplicación y registro de la ejecución
+- Revisión completa del plan y verificación previa (pre-flight) antes de
+  cualquier cambio en el sistema
+- Instalación aplicación por aplicación: un fallo nunca detiene el resto
+- Aplicaciones sin soporte en Homebrew se reportan honestamente como
+  "instalación manual requerida", con su página de descarga — nunca como fallos
+- Resultado con desglose veraz: instaladas, ya instaladas, omitidas, manuales
+  y fallidas (con su motivo)
 
 Cada despliegue queda documentado: el plan exportado y el registro de la
 transacción se guardan en logs/ para soporte y auditoría.
@@ -224,9 +219,19 @@ Ideal para entregar a clientes después de un servicio de mantenimiento.
 
 ---
 
-# 📦 Aplicaciones compatibles
+# 📦 Aplicaciones del catálogo
 
-Dependiendo del hardware y las preferencias del usuario, JB Toolkit puede instalar o actualizar:
+Todo el software desplegable vive en el catálogo (`catalog/`), organizado en
+bundles y perfiles. El catálogo actual incluye:
+
+### JB Essentials (recomendados en todos los perfiles)
+
+- AppCleaner
+- Keka
+- Rectangle
+- Stats
+- PDFgear (instalación manual — no disponible en Homebrew)
+- OpenLogi
 
 ### Productividad
 
@@ -234,43 +239,47 @@ Dependiendo del hardware y las preferencias del usuario, JB Toolkit puede instal
 - Microsoft Excel
 - OneDrive
 
-### Desarrollo
-
-- Visual Studio Code
-- Codex
-- Antigravity
-- Node.js
-- PNPM
-
-### Inteligencia Artificial
+### Personal
 
 - ChatGPT
+- Discord
+- Floorp
 
-### Android
+### Desarrollo
+
+- Git
+- Visual Studio Code
+- Node.js
+- pnpm
+- Docker Desktop
+- Codex
+- Google Antigravity
+
+### Redes y diagnóstico
+
+- Tailscale
+- Wireshark
+- Nmap
+- Angry IP Scanner
+
+### Herramientas de reparación
 
 - Android Platform Tools
-- OpenJDK
-
-### Comunicación
-
-- Discord
+- Mole
 
 ### Multimedia
 
 - Kdenlive
 - GIMP
 
-### Utilidades
+### Recomendadas según hardware
 
-- Tailscale
-- BetterDisplay
 - AlDente
 - Macs Fan Control
-- Logi Options+
+- BetterDisplay
 
-### Navegadores
-
-- Floorp
+Agregar una aplicación nueva es editar un archivo de texto en `catalog/` —
+sin cambios de código. Ver [catalog/README.md](catalog/README.md).
 
 ---
 
