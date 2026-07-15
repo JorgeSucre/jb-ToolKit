@@ -3,22 +3,23 @@
 # =========================
 # Deployment resolution
 # =========================
-# Profile → bundles → application IDs → compatibility-filtered install set.
-# Resolution semantics per docs/Catalog-Format.md: bundles in BUNDLES order,
-# applications in bundle line order, first occurrence wins on duplicates.
-# Every filtered application is recorded with its reason — silent skips are
-# a contract violation.
+# Bundles → application IDs with provenance → compatibility-filtered set.
+# Resolution semantics per docs/Catalog-Format.md: bundles in the given
+# order, applications in bundle line order, first occurrence wins on
+# duplicates. Every filtered application is recorded with its reason —
+# silent skips are a contract violation.
 
-RESOLVED_APPS=""      # compatible app IDs, one per line
-RESOLVED_SKIPPED=""   # "id|reason" per line
+RESOLVED_APPS=""      # "id|bundle" — compatible apps, install order
+RESOLVED_SKIPPED=""   # "id|bundle|reason"
 
 # =========================
-# Profile expansion
+# Bundle expansion
 # =========================
 
-# Ordered, deduplicated application IDs for a profile (no filtering)
-resolve_profile_apps() {
-    local profile="$1"
+# resolve_apps_for_bundles BUNDLES(newline-separated IDs)
+# Emits "app|source-bundle" lines; first occurrence wins on duplicates.
+resolve_apps_for_bundles() {
+    local bundles="$1"
     local bundle app list=""
 
     while IFS= read -r bundle; do
@@ -27,15 +28,19 @@ resolve_profile_apps() {
         while IFS= read -r app; do
             [[ -z "$app" ]] && continue
 
-            if ! grep -qx "$app" <<< "$list"; then
-                list+="$app"$'\n'
+            if ! grep -q "^$app|" <<< "$list"; then
+                list+="$app|$bundle"$'\n'
             fi
 
         done < <(bundle_apps "$bundle")
 
-    done < <(profile_bundles "$profile")
+    done <<< "$bundles"
 
     printf "%s" "$list"
+}
+
+resolve_profile_apps() {
+    resolve_apps_for_bundles "$(profile_bundles "$1")"
 }
 
 # =========================
@@ -77,22 +82,29 @@ app_incompatibility_reason() {
 # Install set
 # =========================
 
-# Populates RESOLVED_APPS and RESOLVED_SKIPPED for a profile
-resolve_install_set() {
-    local profile="$1"
-    local app reason
+# resolve_install_set_for_bundles BUNDLES(newline-separated IDs)
+# Populates RESOLVED_APPS and RESOLVED_SKIPPED.
+resolve_install_set_for_bundles() {
+    local bundles="$1"
+    local record app reason
 
     RESOLVED_APPS=""
     RESOLVED_SKIPPED=""
 
-    while IFS= read -r app; do
-        [[ -z "$app" ]] && continue
+    while IFS= read -r record; do
+        [[ -z "$record" ]] && continue
+
+        app="${record%%|*}"
 
         if reason="$(app_incompatibility_reason "$app")"; then
-            RESOLVED_APPS+="$app"$'\n'
+            RESOLVED_APPS+="$record"$'\n'
         else
-            RESOLVED_SKIPPED+="$app|$reason"$'\n'
+            RESOLVED_SKIPPED+="$record|$reason"$'\n'
         fi
 
-    done < <(resolve_profile_apps "$profile")
+    done < <(resolve_apps_for_bundles "$bundles")
+}
+
+resolve_install_set() {
+    resolve_install_set_for_bundles "$(profile_bundles "$1")"
 }

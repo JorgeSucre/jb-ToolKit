@@ -120,31 +120,55 @@ All writes are user-domain `defaults`; `killall Dock` applies Dock changes.
 `save_maintenance_state` (persist all keys), `print_maintenance_summary`
 (tiered outcome message, freed space, items, profile, score delta).
 
-## Deployment subsystem (Phases 3–5; CLI-only today)
+## Deployment subsystem (planning complete; installation pending)
 
-### `core/deployment.sh` — CLI entry (NOT in the launcher menu yet)
-Phase 3 tooling only: `--validate` walks the whole catalog against the
-[Catalog-Format.md](Catalog-Format.md) rules; `--resolve <perfil>` prints the
-resolved install set with named compatibility skips. Without arguments it announces
-that the interactive module is pending. Menus arrive in Phase 4; installation in
-Phase 5.
+### `core/deployment.sh` — Dispatcher (launcher menu option 4)
+Small by design: sources the sub-modules and dispatches. Interactive entry
+validates the catalog, then runs the menu loop. CLI tools for catalog
+maintenance: `--validate` (full V1–V10 walk), `--resolve <perfil>` (explain
+view), `--tree <perfil>` (tree view). **Nothing here modifies the system.**
 
 ### `core/deployment/catalog.sh`
 Read-only catalog access and the validator. Accessors are tolerant (missing
-file/key → empty, exit 0 — safe under `set -e`); existence checks are explicit
-(`app_exists`, `bundle_exists`, `profile_exists`). Functions: `catalog_field` /
-`app_field` / `profile_field` (state_value-style awk lookup), `list_applications` /
-`list_bundles` / `list_profiles`, `bundle_display_name`, `bundle_apps`,
-`profile_bundles`, and `validate_catalog` implementing rules V1–V10 with per-file,
-per-rule Spanish error messages. `JB_CATALOG_DIR` overrides the catalog root
-(testing affordance).
+file/key → empty, exit 0 — safe under `set -e`); existence checks are explicit.
+Field access (`catalog_field`/`app_field`/`profile_field`), listers, bundle and
+profile readers, hierarchy queries for menu generation (`list_categories`,
+`profiles_in_category`, `category_direct_profile` — the collapse rule,
+`list_jb_picks`), and `validate_catalog` implementing rules V1–V10 with per-file,
+per-rule Spanish messages. `JB_CATALOG_DIR` overrides the catalog root (testing).
 
 ### `core/deployment/resolve.sh`
-`resolve_profile_apps` (bundles in BUNDLES order, line order, first-occurrence
-dedupe), `app_incompatibility_reason` (ARCHS vs `uname -m`, MIN_MACOS vs `sw_vers`
-major; prints the Spanish skip reason), `resolve_install_set` → populates
-`RESOLVED_APPS` and `RESOLVED_SKIPPED` (`id|reason` lines). Skips are always
-recorded, never silent.
+`resolve_apps_for_bundles` (bundle order, line order, first-occurrence dedupe,
+**provenance-carrying** `id|bundle` records), `app_incompatibility_reason`
+(ARCHS vs `uname -m`, MIN_MACOS vs `sw_vers` major → Spanish reason),
+`resolve_install_set_for_bundles` → `RESOLVED_APPS` (`id|bundle`) and
+`RESOLVED_SKIPPED` (`id|bundle|reason`). Skips always recorded, never silent.
+
+### `core/deployment/planner.sh`
+Builds the **Deployment Plan** — the contract between planning and the future
+installer (see [Deployment-Design.md](Deployment-Design.md)). `build_deployment_plan
+<profile>` / `build_custom_plan <bundles>` populate the `PLAN_*` globals: profile
+identity, machine compatibility context, bundles, apps with provenance in install
+order, named skips, JB Picks, verified counts. No system access beyond `uname`/
+`sw_vers`.
+
+### `core/deployment/render.sh`
+Pure presentation; renders catalog/plan data, never resolves or mutates. Element
+renderers (`render_category`, `render_profile`, `render_bundle`,
+`render_application`, `render_jb_pick`) and plan renderers: `render_plan`
+(explain view: provenance + skip reasons + pick notes), `render_plan_tree`
+(developer tree with dedup/skip annotations), `render_confirmation` (summary with
+installation explicitly disabled).
+
+### `core/deployment/menu.sh`
+Navigation generated entirely from catalog data — no hardcoded names.
+`run_deployment_menu` (categories + Personalizado + JB Picks, ≤7 entries),
+`open_category` (submenu or collapse), `run_custom_flow` (bundle multi-select via
+`parse_selection`), `show_jb_picks` (read-only browser).
+
+### `core/deployment/confirm.sh`
+`run_plan_confirmation`: the final planning screen — `[E]` explain, `[G]` tree,
+`[I]` install (disabled with an honest notice until Phase 5), `[0]` back.
 
 ## Reporting
 

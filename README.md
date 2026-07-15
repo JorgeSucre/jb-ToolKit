@@ -194,7 +194,22 @@ Todas las acciones quedan registradas para futuras referencias.
 
 ---
 
-## 4. Report
+## 4. Deployment
+
+Prepara equipos completos mediante perfiles de trabajo (beta — planificación):
+
+- Perfiles por tipo de equipo: Home, Office, Professional, Technician, Developer
+- Bundles reutilizables de aplicaciones seleccionadas por JB Repair
+- JB Picks: recomendaciones curadas con su justificación
+- Perfil personalizado combinando bundles
+- Revisión completa del plan antes de cualquier cambio
+
+La instalación automática del plan estará disponible en una próxima versión;
+por ahora el módulo planifica y muestra exactamente qué se instalaría.
+
+---
+
+## 5. Report
 
 Genera un reporte ejecutivo en PDF con:
 

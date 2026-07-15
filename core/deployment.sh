@@ -12,61 +12,20 @@ init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 source "$BASE_DIR/core/deployment/catalog.sh"
 source "$BASE_DIR/core/deployment/resolve.sh"
+source "$BASE_DIR/core/deployment/planner.sh"
+source "$BASE_DIR/core/deployment/render.sh"
+source "$BASE_DIR/core/deployment/menu.sh"
+source "$BASE_DIR/core/deployment/confirm.sh"
 
 set_ui_context "Deployment"
 
 # =========================
-# Resolution report (developer/CLI view)
+# Dispatch
 # =========================
-
-print_resolution() {
-
-    local profile="$1"
-    local bundle app entry name count
-
-    print_section "📦 Resolución del perfil"
-
-    printf "Perfil:       %s\n" "$(profile_field "$profile" NAME)"
-    printf "Descripción:  %s\n" "$(profile_field "$profile" DESCRIPTION)"
-
-    echo ""
-    echo "Bundles:"
-
-    while IFS= read -r bundle; do
-        [[ -z "$bundle" ]] && continue
-        count=$(bundle_apps "$bundle" | sed '/^$/d' | wc -l | tr -d ' ')
-        printf "   • %s (%s aplicaciones)\n" "$(bundle_display_name "$bundle")" "$count"
-    done < <(profile_bundles "$profile")
-
-    resolve_install_set "$profile"
-
-    count=$(printf "%s" "$RESOLVED_APPS" | sed '/^$/d' | wc -l | tr -d ' ')
-
-    echo ""
-    echo "Aplicaciones a instalar ($count):"
-
-    while IFS= read -r app; do
-        [[ -z "$app" ]] && continue
-        printf "   • %s\n" "$(app_field "$app" NAME)"
-    done <<< "$RESOLVED_APPS"
-
-    if [[ -n "$RESOLVED_SKIPPED" ]]; then
-        echo ""
-        echo "Omitidas por compatibilidad:"
-
-        while IFS= read -r entry; do
-            [[ -z "$entry" ]] && continue
-            name="$(app_field "${entry%%|*}" NAME)"
-            printf "   • %s — %s\n" "$name" "${entry#*|}"
-        done <<< "$RESOLVED_SKIPPED"
-    fi
-}
-
-# =========================
-# CLI dispatch
-# =========================
-# Phase 3 exposes catalog tooling only. The interactive deployment
-# experience (menus, confirmation, installation) arrives in Phases 4–5.
+# Interactive: catalog-generated menus → planner → confirmation.
+# CLI tools (--validate / --resolve / --tree) support catalog maintenance.
+# Nothing in this module modifies the system; installation arrives in
+# Phase 5 and will execute the plan built here.
 
 case "${1:-}" in
 
@@ -80,13 +39,14 @@ case "${1:-}" in
         fi
         ;;
 
-    --resolve)
+    --resolve|--tree)
+        MODE="$1"
         PROFILE_ID="${2:-}"
 
         print_banner
 
         if [[ -z "$PROFILE_ID" ]]; then
-            error_msg "❌ Uso: deployment.sh --resolve <perfil>"
+            error_msg "❌ Uso: deployment.sh $MODE <perfil>"
             echo ""
             echo "Perfiles disponibles:"
             for id in $(list_profiles); do
@@ -95,20 +55,31 @@ case "${1:-}" in
             exit 1
         fi
 
-        if ! profile_exists "$PROFILE_ID"; then
-            error_msg "❌ El perfil no existe: $PROFILE_ID"
+        if ! build_deployment_plan "$PROFILE_ID"; then
             exit 1
         fi
 
-        print_resolution "$PROFILE_ID"
+        if [[ "$MODE" == "--tree" ]]; then
+            render_plan_tree
+        else
+            render_plan
+        fi
+
         print_completion "true"
         ;;
 
     "")
         print_banner
-        echo ""
-        info "ℹ️ El módulo interactivo de Deployment estará disponible en una próxima versión"
-        info "ℹ️ Herramientas disponibles: --validate | --resolve <perfil>"
+
+        if ! validate_catalog; then
+            error_msg "❌ Corrige el catálogo antes de continuar"
+            print_completion "false"
+            exit 1
+        fi
+
+        run_deployment_menu
+
+        print_completion "true"
         ;;
 
     *)

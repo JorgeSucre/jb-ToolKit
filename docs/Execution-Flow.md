@@ -11,11 +11,13 @@ flowchart TD
     MENU -->|1| B[bash core/bootstrap.sh]
     MENU -->|2| D[bash core/diagnostics.sh]
     MENU -->|3| M[bash core/maintenance.sh]
-    MENU -->|4| R[bash core/report.sh]
-    MENU -->|5| EXIT([exit 0])
+    MENU -->|4| DEP[bash core/deployment.sh]
+    MENU -->|5| R[bash core/report.sh]
+    MENU -->|6| EXIT([exit 0])
     B --> PAUSE[pause: Enter to return]
     D --> PAUSE
     M --> PAUSE
+    DEP --> PAUSE
     R --> PAUSE
     PAUSE --> MENU
 ```
@@ -105,7 +107,29 @@ flowchart TD
 
 The decline path is a first-class flow: preview → "no" → zero mutations → clean exit.
 
-## Module 4 — Report (`core/report.sh`)
+## Module 4 — Deployment (`core/deployment.sh`) — planning only
+
+```mermaid
+flowchart TD
+    A[Validate catalog V1–V10<br/>invalid = abort, name the files] --> B[Main menu: categories from data<br/>+ Personalizado + JB Picks, ≤7 entries]
+    B -->|category| C{Collapse rule}
+    C -->|single profile, no SUBCATEGORY| E[build_deployment_plan]
+    C -->|multiple profiles| D[Submenu by SUBCATEGORY/ORDER] --> E
+    B -->|Personalizado| F[Bundle multi-select<br/>parse_selection] --> G[build_custom_plan] --> H
+    B -->|JB Picks| P[Read-only browser:<br/>★★★★★ + mandatory notes] --> B
+    E --> H[Confirmation screen:<br/>bundles, counts, named skips]
+    H -->|E| X[Explain view: provenance + reasons] --> H
+    H -->|G| T[Tree view: catalog structure<br/>+ dedup/skip annotations] --> H
+    H -->|I| N[Honest notice:<br/>installation arrives next phase] --> H
+    H -->|0| B
+```
+
+**Zero system modification.** The module's only writes are the session log. The
+Deployment Plan (`PLAN_*` globals) built here is the exact contract the Phase 5
+installer will execute. CLI tools for catalog maintenance: `--validate`,
+`--resolve <perfil>` (explain), `--tree <perfil>`.
+
+## Module 5 — Report (`core/report.sh`)
 
 1. Double-run guard: `JB_REPORT_ALREADY_RUN` env check.
 2. System section: fastfetch (host/OS) or fallback, CPU, RAM (own measured

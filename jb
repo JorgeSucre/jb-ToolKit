@@ -58,8 +58,9 @@ while true; do
     echo "1) Initial Setup"
     echo "2) Diagnostics (Scan System)"
     echo "3) Maintenance (Fix Issues)"
-    echo "4) Report (Export Results)"
-    echo "5) Exit"
+    echo "4) Deployment (Prepare Mac)"
+    echo "5) Report (Export Results)"
+    echo "6) Exit"
     echo ""
 
     read -r -p "Option: " opt
@@ -82,15 +83,19 @@ while true; do
             pause
             ;;
         4)
-            run_script "📊 Generando reporte..." "$BASE_DIR/core/report.sh"
+            run_script "🚀 Ejecutando deployment..." "$BASE_DIR/core/deployment.sh"
             pause
             ;;
         5)
+            run_script "📊 Generando reporte..." "$BASE_DIR/core/report.sh"
+            pause
+            ;;
+        6)
             echo "👋 Saliendo..."
             exit 0
             ;;
         *)
-            echo "❌ Opción inválida. Selecciona 1–5."
+            echo "❌ Opción inválida. Selecciona 1–6."
             sleep 1
             ;;
     esac

@@ -115,6 +115,61 @@ profile_bundles() {
 }
 
 # =========================
+# Hierarchy queries (menu-generation contract, docs/Catalog-Format.md)
+# =========================
+
+_profile_order() {
+    local order
+    order="$(profile_field "$1" ORDER)"
+    [[ "$order" =~ ^[0-9]+$ ]] || order=50
+    printf "%03d\n" "$order"
+}
+
+# Distinct CATEGORY values ordered by the minimum ORDER among their profiles
+list_categories() {
+    local id
+
+    for id in $(list_profiles); do
+        printf "%s|%s\n" "$(_profile_order "$id")" "$(profile_field "$id" CATEGORY)"
+    done | sort -t'|' -k1,1n -k2,2 | awk -F'|' '!seen[$2]++ {print $2}'
+}
+
+# Profile IDs within a category, ordered by ORDER (ties alphabetical)
+profiles_in_category() {
+    local category="$1" id
+
+    for id in $(list_profiles); do
+        [[ "$(profile_field "$id" CATEGORY)" == "$category" ]] || continue
+        printf "%s|%s\n" "$(_profile_order "$id")" "$id"
+    done | sort -t'|' -k1,1n -k2,2 | cut -d'|' -f2
+}
+
+# Collapse rule: prints the profile ID when the category resolves directly
+# (exactly one profile, no SUBCATEGORY); prints nothing otherwise
+category_direct_profile() {
+    local ids count
+
+    ids="$(profiles_in_category "$1")"
+    count=$(printf "%s\n" "$ids" | sed '/^$/d' | wc -l | tr -d ' ')
+
+    [[ "$count" -eq 1 ]] || return 0
+    [[ -z "$(profile_field "$ids" SUBCATEGORY)" ]] || return 0
+
+    printf "%s\n" "$ids"
+}
+
+# Application IDs marked JB_PICK=true
+list_jb_picks() {
+    local id
+
+    for id in $(list_applications); do
+        [[ "$(app_field "$id" JB_PICK)" == "true" ]] && printf "%s\n" "$id"
+    done
+
+    return 0
+}
+
+# =========================
 # Validation (rules V1–V10, docs/Catalog-Format.md)
 # =========================
 

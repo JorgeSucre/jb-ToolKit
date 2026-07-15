@@ -1,8 +1,8 @@
 # Deployment — Design Document
 
-Status: **DESIGN APPROVED — Phases 2–3 delivered (docs, catalog data, loaders +
-validator).** No installation code and no launcher menu entry exist yet.
-Implementation follows the phased plan at the end.
+Status: **Phases 2–4 delivered.** The complete planning experience is live in the
+launcher (menus, planner, explain/tree views, confirmation). **No installation code
+exists** — Phase 5 will execute the Deployment Plan through the Bootstrap engine.
 
 ## Thesis
 
@@ -70,15 +70,42 @@ results to Report through `state.env` only. It reuses the foundation as-is:
 `run_cmd`, session logging, `ask_yes_no`, `parse_selection`, the Homebrew layer, and
 hardware primitives.
 
-Planned code layout (Phases 3–5; mirrors the bootstrap/maintenance pattern):
+Code layout (mirrors the bootstrap/maintenance pattern; each file one
+responsibility):
 
 ```
-core/deployment.sh              # Orchestrator: menu → resolve → confirm → hand off → verify
+core/deployment.sh              # Small dispatcher: CLI tools + interactive entry
 core/deployment/
-    catalog.sh                  # Load/validate applications, bundles, profiles
-    resolve.sh                  # Profile → bundles → app IDs → filtered install set
-    install.sh                  # Compile temp Brewfile; invoke the Bootstrap engine; verify
+    catalog.sh                  # Catalog access, hierarchy queries, V1–V10 validator
+    resolve.sh                  # Bundles → app IDs with provenance → filtered set
+    planner.sh                  # Builds the Deployment Plan (PLAN_* contract)
+    render.sh                   # Pure presentation: render_* helpers, explain/tree/confirmation
+    menu.sh                     # Catalog-generated navigation, Custom flow, JB Picks browser
+    confirm.sh                  # Confirmation loop (install disabled until Phase 5)
+    install.sh                  # PHASE 5 (pending): execute the plan via the Bootstrap engine
 ```
+
+### The Deployment Plan (Planner ↔ Installer contract)
+
+`build_deployment_plan <profile>` (or `build_custom_plan <bundles>`) populates a
+module-level plan — the **single source of truth for what would happen**. The
+future installer executes an already-built plan and never makes decisions:
+
+| Field | Content |
+|---|---|
+| `PLAN_PROFILE_ID` / `PLAN_PROFILE_NAME` / `PLAN_PROFILE_DESC` | Selected profile (`custom` for user-composed) |
+| `PLAN_ARCH` / `PLAN_MACOS` | Compatibility context of this machine |
+| `PLAN_BUNDLES` | Bundle IDs, resolution order |
+| `PLAN_APPS` | `id\|name\|source-bundle` per line — **install order and provenance** |
+| `PLAN_SKIPPED` | `id\|name\|source-bundle\|reason` per line — named, never silent |
+| `PLAN_PICKS` | JB Pick app IDs within the plan |
+| `PLAN_APP_COUNT` / `PLAN_SKIP_COUNT` / `PLAN_PICK_COUNT` | Verified counts |
+
+The plan is fully renderable with no installer present: the **explain view**
+(`render_plan`) shows every app with its source bundle and every skip with its
+reason; the **tree view** (`render_plan_tree`) shows the catalog structure with
+dedup/skip annotations for catalog maintenance; the **confirmation screen**
+(`render_confirmation`) summarizes counts with installation explicitly disabled.
 
 ## The catalog
 
@@ -317,8 +344,8 @@ begins before the previous one is reviewed.
 | **1 — Foundations** | CONTRIBUTING.md; this design | ✅ Delivered |
 | **2 — Contracts + data** | [Catalog-Format.md](Catalog-Format.md) data contracts; `catalog/` scaffolded: application directories, bundles, profiles, vendor placeholder; resolution diagrams; doc updates. **Pure documentation and data — no code** | ✅ Delivered |
 | **3 — Loaders** | `core/deployment/catalog.sh` + `resolve.sh`: parse, validate (dangling IDs, duplicate IDs, BREW/CASK exclusivity, JB_PICK note rule), resolve profile → filtered app set; a `--validate` mode that walks the whole catalog. CLI-only entry `core/deployment.sh` (`--validate`, `--resolve <perfil>`), **not** wired into the launcher | ✅ Delivered |
-| **4 — Interactive module** | `core/deployment.sh` menus generated from the catalog hierarchy (categories, subcategories, Custom, JB Picks browser) wired into the `jb` launcher; ends at the confirmation screen with an "installation engine pending" notice | Pending |
-| **5 — Installation engine** | `install.sh`: Brewfile compilation, hand-off to the Bootstrap engine pattern, per-app verification, state keys, Report integration | Pending |
+| **4 — Planning and UX** | The complete deployment experience minus installation: catalog-generated menus (categories, collapse rule, Custom, JB Picks browser) wired into the `jb` launcher; the **Deployment Planner** and plan contract; the render layer (`render_*`); explain and tree views; the confirmation screen with install disabled. Zero system modification | ✅ Delivered |
+| **5 — Installation engine** | `install.sh`: takes the Deployment Plan produced by Phase 4 and executes it — Brewfile compilation from `PLAN_APPS`, hand-off to the Bootstrap engine pattern, per-app verification, state keys, Report integration. No decisions, no duplicated install logic | Pending |
 
 Risk containment: Phase 2 is inert data; Phase 3 touches nothing the user can reach;
 Phase 4 is reachable but cannot mutate a system; only Phase 5 installs, and it lands

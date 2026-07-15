@@ -1,7 +1,7 @@
 # Architecture
 
 JB Toolkit is a modular Bash application for macOS maintenance and deployment,
-structured as a **menu-driven launcher that executes four independent module scripts
+structured as a **menu-driven launcher that executes five independent module scripts
 as child processes**. Modules share code by sourcing a common utility layer and share
 runtime data through a file-based state system.
 
@@ -23,11 +23,15 @@ jb-ToolKit/
     ├── maintenance.sh      # Module 3: cleanup + optimization
     ├── report.sh           # Module 4: executive report + PDF
     ├── report_pdf.py       # PDF generator (Python / reportlab)
-    ├── deployment.sh       # Module 5 (partial): catalog CLI — --validate / --resolve
-    │                       #   NOT in the launcher menu yet (Deployment Phase 4 pending)
+    ├── deployment.sh       # Module 5: deployment planning (launcher option 4)
+    │                       #   Installation intentionally disabled until Phase 5
     ├── deployment/         # Deployment sub-modules
-    │   ├── catalog.sh      # Catalog accessors + V1–V10 validator
-    │   └── resolve.sh      # Profile → filtered install set (named skips)
+    │   ├── catalog.sh      # Catalog access, hierarchy queries, V1–V10 validator
+    │   ├── resolve.sh      # Bundles → apps with provenance, compatibility filter
+    │   ├── planner.sh      # Deployment Plan builder (PLAN_* contract)
+    │   ├── render.sh       # Presentation: explain / tree / confirmation views
+    │   ├── menu.sh         # Catalog-generated navigation, Custom, JB Picks browser
+    │   └── confirm.sh      # Confirmation loop (install disabled)
     ├── bootstrap/          # Bootstrap sub-modules
     │   ├── ui.sh           # Shared UI primitives (used by ALL modules)
     │   ├── stages.sh       # Numbered stage progress ([1/5], elapsed time)
@@ -53,7 +57,7 @@ jb-ToolKit/
 | **Diagnostics** | `core/diagnostics.sh` | System summary, top processes, health score, state write |
 | **Maintenance** | `core/maintenance.sh` + `core/maintenance/*` | Preview-confirm-clean workflow, storage analysis, app cleanup, performance profiles, post-score |
 | **Reporting** | `core/report.sh`, `core/report_pdf.py` | Terminal executive report; optional PDF built from `state.env` + system snapshot |
-| **Deployment** *(partial)* | `core/deployment.sh` + `core/deployment/*` | Catalog validation and profile resolution (CLI only; menus and installation pending — see [Deployment-Design.md](Deployment-Design.md)) |
+| **Deployment** *(planning only)* | `core/deployment.sh` + `core/deployment/*` | Catalog-driven menus, Deployment Planner, explain/tree/confirmation views; installation pending (Phase 5 — see [Deployment-Design.md](Deployment-Design.md)) |
 | **State** | `logs/state.env` | Key-value persistence across module processes and sessions |
 
 ## Module dependency graph
@@ -63,6 +67,7 @@ graph TD
     JB[jb launcher] -->|bash| BOOT[core/bootstrap.sh]
     JB -->|bash| DIAG[core/diagnostics.sh]
     JB -->|bash| MAINT[core/maintenance.sh]
+    JB -->|bash| DEP[core/deployment.sh]
     JB -->|bash| REP[core/report.sh]
 
     subgraph Foundation
@@ -91,6 +96,11 @@ graph TD
     MAINT -->|source| PERF[maintenance/performance.sh]
     MAINT -->|source| MSTATE[maintenance/state.sh]
     MAINT -->|source| STOR[maintenance/storage.sh]
+
+    DEP -->|source| UTILS
+    DEP -->|source| UI
+    DEP -->|source| DSUB[deployment/catalog.sh, resolve.sh,<br/>planner.sh, render.sh, menu.sh, confirm.sh]
+    DEP -.->|reads| CATDATA[(catalog/)]
 
     REP -->|python3| PDF[core/report_pdf.py]
 
