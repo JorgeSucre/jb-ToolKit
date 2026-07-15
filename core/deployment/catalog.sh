@@ -169,6 +169,30 @@ list_jb_picks() {
     return 0
 }
 
+# Application IDs whose HW_RECOMMEND matches this machine.
+# apps_recommended_for_hardware FAMILY HAS_EXTERNAL_DISPLAY(0|1)
+# A tag matches when it equals FAMILY, or when it is "external_display"
+# and an external display is present.
+apps_recommended_for_hardware() {
+    local family="$1" has_external="${2:-0}"
+    local id tags tag
+
+    for id in $(list_applications); do
+        tags="$(app_field "$id" HW_RECOMMEND)"
+        [[ -z "$tags" ]] && continue
+
+        for tag in $tags; do
+            if [[ "$tag" == "$family" ]] \
+                || [[ "$tag" == "external_display" && "$has_external" -eq 1 ]]; then
+                printf "%s\n" "$id"
+                break
+            fi
+        done
+    done
+
+    return 0
+}
+
 # =========================
 # Validation (rules V1–V10, docs/Catalog-Format.md)
 # =========================
@@ -193,7 +217,7 @@ _flag_line() {
 validate_application() {
     local id="$1"
     local conf ref="applications/$id/app.conf"
-    local field brew cask value arch
+    local field method value arch tag
     conf="$(app_conf_path "$id")"
 
     _valid_id "$id" \
@@ -207,13 +231,29 @@ validate_application() {
             || catalog_error "V2: $ref — falta el campo requerido $field"
     done
 
-    brew="$(app_field "$id" BREW)"
-    cask="$(app_field "$id" CASK)"
-    if [[ -n "$brew" && -n "$cask" ]]; then
-        catalog_error "V3: $ref — BREW y CASK son mutuamente excluyentes"
-    elif [[ -z "$brew" && -z "$cask" ]]; then
-        catalog_error "V3: $ref — se requiere exactamente uno de BREW o CASK"
-    fi
+    method="$(app_field "$id" INSTALL_METHOD)"
+    case "$method" in
+        brew|cask|mas)
+            [[ -n "$(app_field "$id" PACKAGE)" ]] \
+                || catalog_error "V3: $ref — INSTALL_METHOD=$method requiere PACKAGE"
+            ;;
+        pkg|dmg|manual)
+            [[ -n "$(app_field "$id" DOWNLOAD_URL)" ]] \
+                || catalog_error "V3: $ref — INSTALL_METHOD=$method requiere DOWNLOAD_URL"
+            ;;
+        "")
+            catalog_error "V3: $ref — falta INSTALL_METHOD (brew|cask|mas|pkg|dmg|manual)"
+            ;;
+        *)
+            catalog_error "V3: $ref — INSTALL_METHOD desconocido: '$method'"
+            ;;
+    esac
+
+    # Legacy keys from the v2.0.0 contract — silent no-ops if left behind
+    for field in BREW CASK; do
+        [[ -n "$(_flag_line "$conf" "$field")" ]] \
+            && catalog_error "V3: $ref — la clave $field ya no existe; usa INSTALL_METHOD y PACKAGE"
+    done
 
     for field in JB_PICK RECOMMENDED; do
         value="$(_flag_line "$conf" "$field")"
@@ -238,6 +278,13 @@ validate_application() {
     if [[ -n "$value" && ! "$value" =~ ^[0-9]+$ ]]; then
         catalog_error "V6: $ref — MIN_MACOS debe ser un entero"
     fi
+
+    for tag in $(app_field "$id" HW_RECOMMEND); do
+        case "$tag" in
+            macbook_air|macbook_pro|mac_mini|mac_studio|imac|external_display) ;;
+            *) catalog_error "V6: $ref — familia desconocida en HW_RECOMMEND: '$tag'" ;;
+        esac
+    done
 }
 
 validate_bundle() {
@@ -292,16 +339,19 @@ validate_profile() {
     done < <(profile_bundles "$id")
 }
 
-# V8 (global): a Homebrew package name may exist in exactly one app.conf
+# V8 (global): a package identifier may exist in exactly one app.conf
+# (per method — the brew, cask, and mas namespaces are independent)
 validate_package_uniqueness() {
-    local dup
+    local id dup pkg
 
     while IFS= read -r dup; do
         [[ -z "$dup" ]] && continue
         catalog_error "V8: el paquete '$dup' está definido en más de una aplicación"
     done < <(
-        grep -hE '^(BREW|CASK)=' "$CATALOG_DIR"/applications/*/app.conf 2>/dev/null \
-            | sort | uniq -d
+        for id in $(list_applications); do
+            pkg="$(app_field "$id" PACKAGE)"
+            [[ -n "$pkg" ]] && printf "%s:%s\n" "$(app_field "$id" INSTALL_METHOD)" "$pkg"
+        done | sort | uniq -d
     )
 }
 

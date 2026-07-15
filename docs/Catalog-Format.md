@@ -45,8 +45,9 @@ name** and read `<dir>/app.conf` — never glob for conf files across the tree.
 |---|---|---|
 | `ID` | yes | Must equal the directory name exactly |
 | `NAME` | yes | Display name, shown verbatim in the UI |
-| `BREW` | exactly one of `BREW`/`CASK` | Homebrew formula name |
-| `CASK` | exactly one of `BREW`/`CASK` | Homebrew cask name |
+| `INSTALL_METHOD` | yes | `brew` \| `cask` \| `mas` \| `pkg` \| `dmg` \| `manual`. See "Installation methods" below |
+| `PACKAGE` | iff method is `brew`/`cask`/`mas` | The package identifier: Homebrew formula name, cask token, or Mac App Store numeric ID |
+| `DOWNLOAD_URL` | iff method is `manual`/`pkg`/`dmg` | Where the technician obtains the app. Optional for other methods |
 | `DESCRIPTION` | yes | One line, Spanish |
 | `CATEGORIES` | no | Space-separated lowercase tags (informational; used for grouping in future flows) |
 | `JB_PICK` | no | `true` or absent. Any other value is invalid |
@@ -54,10 +55,31 @@ name** and read `<dir>/app.conf` — never glob for conf files across the tree.
 | `ARCHS` | no | Space-separated `uname -m` values (`arm64`, `x86_64`). Absent = all architectures |
 | `MIN_MACOS` | no | Minimum macOS **major** version (integer, e.g. `12`). Absent = any supported macOS |
 | `RECOMMENDED` | no | `true` or absent. Ordering hint in future Custom flows |
+| `HW_RECOMMEND` | no | Space-separated machine families this app is recommended for: `macbook_air`, `macbook_pro`, `mac_mini`, `mac_studio`, `imac`, plus the pseudo-family `external_display`. Apps carrying this field are offered by the hardware-recommendation flow and are exempt from the doctor's "unreferenced" advisory |
 
-The `BREW`/`CASK` line is the **single place in the repository** where a Homebrew
-package name may appear for deployment purposes. Bundles and profiles must never
-contain package names.
+The `PACKAGE` line is the **single place in the repository** where a package
+identifier may appear for deployment purposes (unique per method — the brew, cask,
+and mas namespaces are independent). Bundles and profiles must never contain
+package names. The legacy v2.0.0 keys `BREW=` and `CASK=` are **invalid**; the
+validator rejects them so a leftover line can never become a silent no-op.
+
+### Installation methods
+
+| Method | Automated? | Carrier field | Behavior |
+|---|---|---|---|
+| `brew` | yes | `PACKAGE` (formula) | Installed by the engine (`brew install`) and verified per app |
+| `cask` | yes | `PACKAGE` (cask token) | Installed by the engine (`brew install --cask`) and verified per app |
+| `mas` | not yet | `PACKAGE` (App Store ID) | Manual track: reported as "instalar desde App Store" |
+| `pkg` | not yet | `DOWNLOAD_URL` | Manual track: reported as a manual step, download page offered |
+| `dmg` | not yet | `DOWNLOAD_URL` | Manual track: reported as a manual step, download page offered |
+| `manual` | no | `DOWNLOAD_URL` | Manual track: reported as a manual step, download page offered |
+
+Applications on the **manual track** are first-class catalog members: they appear
+in bundles, profiles, JB Picks, plans, and reports. They are **never** deployment
+failures — the plan carries them separately (`PLAN_MANUAL`) and the result screen
+lists them as pending manual steps. If a manual-track app's bundle
+(`/Applications/<NAME>.app`) is already present, it is reported as already
+installed (verified by existence).
 
 ### Example
 
@@ -65,11 +87,25 @@ contain package names.
 # catalog/applications/keka/app.conf
 ID=keka
 NAME=Keka
-CASK=keka
+INSTALL_METHOD=cask
+PACKAGE=keka
 DESCRIPTION=Compresor y descompresor moderno y sin publicidad
 CATEGORIES=utilities
 JB_PICK=true
 JB_PICK_NOTE=Reemplazo moderno de The Unarchiver. Años de uso sin incidencias en equipos de clientes.
+RECOMMENDED=true
+```
+
+```bash
+# catalog/applications/pdfgear/app.conf — not available through Homebrew
+ID=pdfgear
+NAME=PDFgear
+INSTALL_METHOD=manual
+DOWNLOAD_URL=https://www.pdfgear.com/
+DESCRIPTION=Editor PDF gratuito y completo
+CATEGORIES=productivity
+JB_PICK=true
+JB_PICK_NOTE=Cubre la mayoría de casos de edición PDF sin licencia de Acrobat. Ahorro real para clientes.
 RECOMMENDED=true
 ```
 
@@ -175,6 +211,11 @@ flowchart LR
 - Compatibility filtering compares `ARCHS` against `uname -m` and `MIN_MACOS`
   against `sw_vers -productVersion` (major). Every filtered application is recorded
   as a named skip with its reason — **silent skips are a contract violation.**
+- The planner then splits the surviving set by `INSTALL_METHOD`: `brew`/`cask`
+  records go to the automatic install list, everything else to the manual-step
+  list. Technician deselections from bundle review are recorded as named skips
+  ("deseleccionada por el técnico"), and hardware-recommendation extras enter with
+  provenance `hardware`.
 
 ## Validation rules (Phase 3 validator)
 
@@ -185,12 +226,12 @@ complete rule set:
 |---|---|
 | V1 | `ID` equals its directory name (applications) / filename stem (bundles, profiles) |
 | V2 | All required fields present and non-empty |
-| V3 | Exactly one of `BREW` / `CASK` per application |
+| V3 | `INSTALL_METHOD` present and ∈ {`brew`, `cask`, `mas`, `pkg`, `dmg`, `manual`}; `PACKAGE` present for `brew`/`cask`/`mas`; `DOWNLOAD_URL` present for `manual`/`pkg`/`dmg`; legacy `BREW`/`CASK` keys rejected |
 | V4 | `JB_PICK`, `RECOMMENDED` are `true` when present |
 | V5 | `JB_PICK=true` requires a non-empty `JB_PICK_NOTE` |
-| V6 | `ARCHS` values ∈ {`arm64`, `x86_64`}; `MIN_MACOS` and `ORDER` are integers |
+| V6 | `ARCHS` values ∈ {`arm64`, `x86_64`}; `MIN_MACOS` and `ORDER` are integers; `HW_RECOMMEND` values ∈ the known machine families |
 | V7 | Every bundle line resolves to an existing application directory |
-| V8 | No duplicate IDs within a bundle; no duplicate application/bundle/profile IDs globally |
+| V8 | No duplicate IDs within a bundle; no duplicate application/bundle/profile IDs globally; no `method:PACKAGE` pair defined by more than one application |
 | V9 | Every `BUNDLES` entry resolves to an existing bundle file |
 | V10 | Bundle files begin with a display-name comment line |
 
@@ -201,7 +242,7 @@ suggestions** on a valid catalog. Advisories never fail validation:
 
 | # | Advisory |
 |---|---|
-| A1 | Application exists but no bundle references it |
+| A1 | Application exists but no bundle references it (apps with `HW_RECOMMEND` are exempt — they are reachable through the hardware-recommendation flow) |
 | A2 | Bundle contains a single application |
 | A3 | Application appears in multiple bundles (legitimate; dedup applies at resolution) |
 | A4 | Profile references a single bundle |
@@ -213,8 +254,12 @@ V5. A recommendation without reasoning is invalid, not merely improvable.
 ## Adding catalog entries — technician quick reference
 
 **New application:** create `catalog/applications/<id>/`, write `app.conf` with the
-required fields, exactly one of `BREW`/`CASK`. If it's a JB Pick, write the reason —
-the note is what makes it a recommendation.
+required fields and its `INSTALL_METHOD` (`PACKAGE` for brew/cask/mas,
+`DOWNLOAD_URL` for manual/pkg/dmg). Verify the package identifier against the real
+installation method — `brew info --formula <name>` or `brew info --cask <name>` —
+before committing it. If the app isn't available through Homebrew, that is not a
+problem: declare it `manual` with its download page. If it's a JB Pick, write the
+reason — the note is what makes it a recommendation.
 
 **New bundle:** create `catalog/bundles/<id>.bundle`, first line `# Display Name`,
 then one existing application ID per line.

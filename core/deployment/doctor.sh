@@ -35,8 +35,10 @@ run_catalog_doctor() {
 
     refs="$(_all_bundle_references)"
 
-    # A1 — applications never referenced by any bundle
+    # A1 — applications never referenced by any bundle (hardware
+    # recommendations are reachable through the hardware flow instead)
     for id in $(list_applications); do
+        [[ -n "$(app_field "$id" HW_RECOMMEND)" ]] && continue
         if ! grep -qx "$id" <<< "$refs"; then
             catalog_advice "La aplicación '$id' no está referenciada por ningún bundle"
         fi
