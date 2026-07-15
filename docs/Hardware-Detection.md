@@ -1,7 +1,8 @@
 # Hardware Detection
 
-Hardware awareness drives Brewfile selection, package recommendations, app risk
-scoring, and performance-profile branching. Detection lives in two layers:
+Hardware awareness drives deployment compatibility filtering, hardware-based
+package recommendations, app risk scoring, and performance-profile branching.
+Detection lives in two layers:
 primitives in `core/utils.sh` (available to every module) and presentation /
 bootstrap-specific logic in `core/bootstrap/hardware.sh`.
 
@@ -42,25 +43,31 @@ Rosetta can be installed but idle): it checks the runtime binary on disk first
 
 | Decision | Input | Where |
 |---|---|---|
-| Brewfile variant (`Brewfile.apple` / `Brewfile.intel`) | `uname -m` | `select_brewfile` (brew.sh) |
-| Package recommendations | machine family + external display | `offer_hardware_recommendations` (packages.sh) |
+| Deployment compatibility skips (`ARCHS`) | `uname -m` vs catalog data | `app_incompatibility_reason` (resolve.sh) |
+| Hardware recommendations | machine family + external display vs `HW_RECOMMEND` catalog data | `offer_hardware_extras` (deployment/menu.sh) |
 | App risk: Intel-only penalty (+35) | module arch check + per-app binary inspection | apps.sh |
 | Siri tweaks (aggressive profile) | Intel only | performance.sh |
 | Rosetta status line | Apple Silicon only | `print_hardware_summary` |
 | Laptop vs desktop profile summary | `BATTERY` | `print_optimization_summary` |
 
-### Recommendation matrix (`offer_hardware_recommendations`)
+### Hardware recommendations (`offer_hardware_extras` + `HW_RECOMMEND`)
 
-| Machine family | Recommended packages |
+The matching is **catalog data**: an application's `HW_RECOMMEND` field lists the
+machine families it is recommended for (`macbook_air`, `macbook_pro`, `mac_mini`,
+`mac_studio`, `imac`) plus the pseudo-family `external_display`, which matches any
+machine with more than one display. The current catalog encodes:
+
+| Application | `HW_RECOMMEND` |
 |---|---|
-| MacBook Air | AlDente (+ BetterDisplay with external display) |
-| MacBook Pro | AlDente, Macs Fan Control (+ BetterDisplay with external display) |
-| Mac mini / Mac Studio | Macs Fan Control, BetterDisplay |
-| iMac | Macs Fan Control (+ BetterDisplay with external display) |
-| other | no recommendations |
+| AlDente | `macbook_air macbook_pro` |
+| Macs Fan Control | `macbook_pro mac_mini mac_studio imac` |
+| BetterDisplay | `mac_mini mac_studio external_display` |
 
-Already-installed and up-to-date packages are acknowledged and excluded from the
-selectable list; outdated ones are offered as "Actualizar X".
+Applications already verified as installed (Homebrew query) are excluded from the
+offer. Accepted recommendations enter the Deployment Plan as extras with
+provenance `hardware`, subject to the same compatibility filter as everything
+else. Changing what gets recommended for which machine is a catalog edit, not a
+code change.
 
 ## Intel-only app detection (`is_intel_only_app`, apps.sh)
 

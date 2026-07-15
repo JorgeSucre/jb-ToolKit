@@ -13,6 +13,25 @@ _count_lines() {
     printf "%s\n" "$1" | sed '/^$/d' | wc -l | tr -d ' '
 }
 
+# plan_source_label SOURCE — human label for a plan record's provenance
+# (a bundle ID, or the literal "hardware" for hardware recommendations)
+plan_source_label() {
+    if bundle_exists "$1"; then
+        bundle_display_name "$1"
+    else
+        printf "recomendación para este Mac\n"
+    fi
+}
+
+# manual_step_label METHOD — what the technician must do for a
+# non-automated INSTALL_METHOD
+manual_step_label() {
+    case "$1" in
+        mas) printf "instalar desde App Store\n" ;;
+        *)   printf "instalación manual requerida\n" ;;
+    esac
+}
+
 # =========================
 # Element renderers
 # =========================
@@ -41,12 +60,12 @@ render_bundle() {
     printf "%s (%s aplicaciones)\n" "$(bundle_display_name "$1")" "$count"
 }
 
-# render_application ID [SOURCE_BUNDLE_ID] — checked line with provenance
+# render_application ID [SOURCE] — checked line with provenance
 render_application() {
     printf "   ✓ %s\n" "$(app_field "$1" NAME)"
 
     if [[ -n "${2:-}" ]]; then
-        printf "       desde %s\n" "$(bundle_display_name "$2")"
+        printf "       desde %s\n" "$(plan_source_label "$2")"
     fi
 }
 
@@ -84,10 +103,22 @@ render_plan() {
     echo ""
     echo "Aplicaciones ($PLAN_APP_COUNT):"
 
-    while IFS='|' read -r id name bundle _ptype _ppkg; do
+    while IFS='|' read -r id name bundle _method _pkg; do
         [[ -z "$id" ]] && continue
         render_application "$id" "$bundle"
     done <<< "$PLAN_APPS"
+
+    if [[ "$PLAN_MANUAL_COUNT" -gt 0 ]]; then
+        echo ""
+        echo "Instalación manual ($PLAN_MANUAL_COUNT):"
+
+        while IFS='|' read -r id name bundle method url; do
+            [[ -z "$id" ]] && continue
+            printf "   ✋ %s — %s\n" "$name" "$(manual_step_label "$method")"
+            [[ -n "$url" ]] && printf "       %s\n" "$url"
+            printf "       desde %s\n" "$(plan_source_label "$bundle")"
+        done <<< "$PLAN_MANUAL"
+    fi
 
     if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
         echo ""
@@ -96,7 +127,7 @@ render_plan() {
         while IFS='|' read -r id name bundle reason; do
             [[ -z "$id" ]] && continue
             printf "   ⚠️ %s\n" "$name"
-            printf "       %s (desde %s)\n" "$reason" "$(bundle_display_name "$bundle")"
+            printf "       %s (desde %s)\n" "$reason" "$(plan_source_label "$bundle")"
         done <<< "$PLAN_SKIPPED"
     fi
 
@@ -156,7 +187,9 @@ render_plan_tree() {
             annotation=""
             if grep -q "^$app|[^|]*|$bundle|" <<< "$PLAN_APPS"; then
                 :   # provided by this bundle — no annotation
-            elif grep -q "^$app|" <<< "$PLAN_APPS"; then
+            elif grep -q "^$app|[^|]*|$bundle|" <<< "$PLAN_MANUAL"; then
+                annotation=" (instalación manual)"
+            elif grep -q "^$app|" <<< "$PLAN_APPS$PLAN_MANUAL"; then
                 annotation=" (ya incluido por otro bundle)"
             else
                 line="$(grep -m1 "^$app|" <<< "$PLAN_SKIPPED" || true)"
@@ -179,7 +212,7 @@ render_plan_summary() {
 
     [[ "$PLAN_READY" -eq 1 ]] || return 0
 
-    local id name bundle reason _ptype _ppkg
+    local id name bundle reason method url _pkg
 
     print_section "📦 Resolución: $PLAN_PROFILE_NAME"
 
@@ -189,10 +222,20 @@ render_plan_summary() {
     echo ""
     echo "Instalaría ($PLAN_APP_COUNT):"
 
-    while IFS='|' read -r id name bundle _ptype _ppkg; do
+    while IFS='|' read -r id name bundle method _pkg; do
         [[ -z "$id" ]] && continue
         printf "   • %s\n" "$name"
     done <<< "$PLAN_APPS"
+
+    if [[ "$PLAN_MANUAL_COUNT" -gt 0 ]]; then
+        echo ""
+        echo "Requeriría acción manual ($PLAN_MANUAL_COUNT):"
+
+        while IFS='|' read -r id name bundle method url; do
+            [[ -z "$id" ]] && continue
+            printf "   • %s — %s\n" "$name" "$(manual_step_label "$method")"
+        done <<< "$PLAN_MANUAL"
+    fi
 
     if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
         echo ""
@@ -226,7 +269,8 @@ render_confirmation() {
     done <<< "$PLAN_BUNDLES"
 
     echo ""
-    printf "Aplicaciones en el plan:  %s\n" "$PLAN_APP_COUNT"
+    printf "Instalación automática:   %s\n" "$PLAN_APP_COUNT"
+    printf "Instalación manual:       %s\n" "$PLAN_MANUAL_COUNT"
     printf "JB Picks incluidos:       %s\n" "$PLAN_PICK_COUNT"
     printf "Omitidas:                 %s\n" "$PLAN_SKIP_COUNT"
 
@@ -235,10 +279,12 @@ render_confirmation() {
 }
 
 # Result screen: consumes the Installation Transaction (verified outcomes
-# only — the plan said what would happen; this shows what actually did)
+# only — the plan said what would happen; this shows what actually did).
+# Every application has a named outcome: installed, already installed,
+# skipped, manual, or failed (with its reason). Nothing is silent.
 render_transaction() {
 
-    local line id name bundle reason
+    local id name bundle reason
 
     print_section "📦 Resultado del despliegue"
 
@@ -246,45 +292,69 @@ render_transaction() {
 
     echo ""
 
-    if [[ "$TXN_ATTEMPTED" -eq 0 ]]; then
+    if [[ "$TXN_ATTEMPTED" -eq 0 && "$TXN_ALREADY" -gt 0 && "$TXN_MANUAL" -eq 0 ]]; then
         success "✔ Todas las aplicaciones del plan ya estaban instaladas"
-    else
+    elif [[ "$TXN_ATTEMPTED" -gt 0 ]]; then
         printf "Instaladas: %s de %s\n" "$TXN_INSTALLED" "$TXN_ATTEMPTED"
     fi
 
     if [[ "$TXN_INSTALLED" -gt 0 ]]; then
         echo ""
+        echo "Instaladas:"
         while IFS='|' read -r id name; do
             [[ -z "$id" ]] && continue
             printf "   ✓ %s\n" "$name"
         done <<< "$TXN_INSTALLED_APPS"
     fi
 
-    if [[ "$TXN_FAILED" -gt 0 ]]; then
+    if [[ "$TXN_ALREADY" -gt 0 ]]; then
         echo ""
-        echo "Fallidas:"
+        echo "Ya estaban instaladas:"
         while IFS='|' read -r id name; do
             [[ -z "$id" ]] && continue
-            printf "   ❌ %s — no quedó instalada tras brew bundle\n" "$name"
-        done <<< "$TXN_FAILED_APPS"
+            printf "   ✓ %s\n" "$name"
+        done <<< "$TXN_ALREADY_APPS"
+    fi
+
+    if [[ "$TXN_MANUAL" -gt 0 ]]; then
+        echo ""
+        echo "Requieren instalación manual (no es un fallo del despliegue):"
+        while IFS='|' read -r id name; do
+            [[ -z "$id" ]] && continue
+            printf "   ✋ %s\n" "$name"
+        done <<< "$TXN_MANUAL_APPS"
     fi
 
     if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
         echo ""
-        echo "Omitidas por compatibilidad:"
+        echo "Omitidas:"
         while IFS='|' read -r id name bundle reason; do
             [[ -z "$id" ]] && continue
             printf "   • %s — %s\n" "$name" "$reason"
         done <<< "$PLAN_SKIPPED"
     fi
 
+    if [[ "$TXN_FAILED" -gt 0 ]]; then
+        echo ""
+        echo "Fallidas:"
+        while IFS='|' read -r id name reason; do
+            [[ -z "$id" ]] && continue
+            printf "   ❌ %s — %s\n" "$name" "${reason:-no quedó instalada}"
+        done <<< "$TXN_FAILED_APPS"
+    fi
+
     echo ""
-    printf "Ya estaban instaladas: %s\n" "$TXN_ALREADY"
     print_elapsed_time "$TXN_DURATION"
 
     echo ""
     case "$TXN_RESULT" in
-        success) success "✔ Despliegue completado correctamente" ;;
+        success)
+            if [[ "$TXN_MANUAL" -gt 0 ]]; then
+                success "✔ Despliegue automático completado; quedan pasos manuales listados arriba"
+            else
+                success "✔ Despliegue completado correctamente"
+            fi
+            ;;
         partial) warn "⚠️ Despliegue completado con fallos; revisa las aplicaciones fallidas" ;;
         failed)  error_msg "❌ El despliegue no pudo instalar aplicaciones" ;;
     esac

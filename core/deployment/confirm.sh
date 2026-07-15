@@ -20,7 +20,7 @@ run_plan_confirmation() {
         echo ""
         echo "[E] Explicar plan   [G] Ver árbol   [I] Instalar   [0] Volver"
         printf "Selecciona una opción: "
-        read -r choice
+        read -r choice || choice="0"
 
         case "$choice" in
 

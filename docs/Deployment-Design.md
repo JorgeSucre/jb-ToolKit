@@ -1,10 +1,17 @@
 # Deployment — Design Document
 
-Status: **All five phases delivered.** The Deployment module is complete: planning,
-review, and installation through the Bootstrap engine, with the Installation
-Transaction as the execution record. The final pipeline reference is
-[Deployment-Architecture.md](Deployment-Architecture.md); this document remains the
-design history.
+Status: **All five phases delivered; evolved in v2.0.1.** The Deployment module is
+complete: planning, review, and installation, with the Installation Transaction as
+the execution record. This document is the **design history** — it describes the
+phases as they were designed and shipped. v2.0.1 later evolved three details
+recorded here: the catalog's `BREW`/`CASK` fields became the generic
+`INSTALL_METHOD`/`PACKAGE`/`DOWNLOAD_URL` model (with a manual track for apps
+Homebrew can't provide), the engine changed from one `brew bundle` over a temp
+Brewfile to **per-application** `brew install` (one failure never aborts the
+rest), and Bootstrap's software step became a wizard over this same pipeline.
+The current pipeline reference is
+[Deployment-Architecture.md](Deployment-Architecture.md); the current data
+contract is [Catalog-Format.md](Catalog-Format.md).
 
 ## Thesis
 

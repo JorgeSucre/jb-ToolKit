@@ -20,12 +20,19 @@
 #   PLAN_ARCH           uname -m of this machine (compatibility context)
 #   PLAN_MACOS          macOS version of this machine
 #   PLAN_BUNDLES        bundle IDs, resolution order, one per line
-#   PLAN_APPS           "id|name|source-bundle|pkg-type|pkg-name" — install
-#                       order; pkg-type is brew|cask. The installer consumes
-#                       these records verbatim and never reads the catalog.
-#   PLAN_SKIPPED        "id|name|source-bundle|reason", one per line
+#   PLAN_APPS           "id|name|source|method|package" — install order;
+#                       method is brew|cask (the automated engine). The
+#                       installer consumes these records verbatim and never
+#                       reads the catalog. source is a bundle ID, or the
+#                       literal "hardware" for hardware recommendations.
+#   PLAN_MANUAL         "id|name|source|method|download-url" — applications
+#                       whose INSTALL_METHOD the toolkit cannot automate
+#                       (mas, pkg, dmg, manual). First-class plan members,
+#                       never failures: reported as manual steps.
+#   PLAN_SKIPPED        "id|name|source|reason", one per line — includes
+#                       compatibility skips AND technician deselections
 #   PLAN_PICKS          app IDs within the plan marked JB_PICK=true
-#   PLAN_APP_COUNT / PLAN_SKIP_COUNT / PLAN_PICK_COUNT
+#   PLAN_APP_COUNT / PLAN_MANUAL_COUNT / PLAN_SKIP_COUNT / PLAN_PICK_COUNT
 
 PLAN_READY=0
 PLAN_ID=""
@@ -37,9 +44,11 @@ PLAN_ARCH=""
 PLAN_MACOS=""
 PLAN_BUNDLES=""
 PLAN_APPS=""
+PLAN_MANUAL=""
 PLAN_SKIPPED=""
 PLAN_PICKS=""
 PLAN_APP_COUNT=0
+PLAN_MANUAL_COUNT=0
 PLAN_SKIP_COUNT=0
 PLAN_PICK_COUNT=0
 
@@ -54,9 +63,11 @@ reset_deployment_plan() {
     PLAN_MACOS=""
     PLAN_BUNDLES=""
     PLAN_APPS=""
+    PLAN_MANUAL=""
     PLAN_SKIPPED=""
     PLAN_PICKS=""
     PLAN_APP_COUNT=0
+    PLAN_MANUAL_COUNT=0
     PLAN_SKIP_COUNT=0
     PLAN_PICK_COUNT=0
 }
@@ -65,10 +76,49 @@ reset_deployment_plan() {
 # Plan builders
 # =========================
 
-# build_plan_for_bundles ID NAME DESC BUNDLES(newline-separated IDs)
+# _plan_add_app APP SOURCE — classifies one application into the automatic
+# track (brew/cask) or the manual track (mas/pkg/dmg/manual) and counts it
+_plan_add_app() {
+    local app="$1" source="$2"
+    local app_name method
+
+    app_name="$(app_field "$app" NAME)"
+    method="$(app_field "$app" INSTALL_METHOD)"
+
+    case "$method" in
+        brew|cask)
+            PLAN_APPS+="$app|$app_name|$source|$method|$(app_field "$app" PACKAGE)"$'\n'
+            PLAN_APP_COUNT=$((PLAN_APP_COUNT + 1))
+            ;;
+        *)
+            PLAN_MANUAL+="$app|$app_name|$source|$method|$(app_field "$app" DOWNLOAD_URL)"$'\n'
+            PLAN_MANUAL_COUNT=$((PLAN_MANUAL_COUNT + 1))
+            ;;
+    esac
+
+    if [[ "$(app_field "$app" JB_PICK)" == "true" ]]; then
+        PLAN_PICKS+="$app"$'\n'
+        PLAN_PICK_COUNT=$((PLAN_PICK_COUNT + 1))
+    fi
+}
+
+_plan_add_skip() {
+    local app="$1" source="$2" reason="$3"
+
+    PLAN_SKIPPED+="$app|$(app_field "$app" NAME)|$source|$reason"$'\n'
+    PLAN_SKIP_COUNT=$((PLAN_SKIP_COUNT + 1))
+}
+
+# build_plan_for_bundles ID NAME DESC BUNDLES [EXCLUDED] [EXTRAS]
+#   BUNDLES   newline-separated bundle IDs (resolution order)
+#   EXCLUDED  newline-separated app IDs the technician deselected during
+#             bundle review — recorded as named skips, never silent
+#   EXTRAS    newline-separated app IDs added outside the bundles
+#             (hardware recommendations) — provenance "hardware"
 build_plan_for_bundles() {
     local id="$1" name="$2" desc="$3" bundles="$4"
-    local app bundle reason app_name pkg_type pkg_name
+    local excluded="${5:-}" extras="${6:-}"
+    local app bundle reason
 
     reset_deployment_plan
 
@@ -86,60 +136,71 @@ build_plan_for_bundles() {
     while IFS='|' read -r app bundle; do
         [[ -z "$app" ]] && continue
 
-        app_name="$(app_field "$app" NAME)"
-
-        pkg_name="$(app_field "$app" BREW)"
-        if [[ -n "$pkg_name" ]]; then
-            pkg_type="brew"
-        else
-            pkg_type="cask"
-            pkg_name="$(app_field "$app" CASK)"
+        if [[ -n "$excluded" ]] && grep -qx "$app" <<< "$excluded"; then
+            _plan_add_skip "$app" "$bundle" "deseleccionada por el técnico"
+            continue
         fi
 
-        PLAN_APPS+="$app|$app_name|$bundle|$pkg_type|$pkg_name"$'\n'
-        PLAN_APP_COUNT=$((PLAN_APP_COUNT + 1))
-
-        if [[ "$(app_field "$app" JB_PICK)" == "true" ]]; then
-            PLAN_PICKS+="$app"$'\n'
-            PLAN_PICK_COUNT=$((PLAN_PICK_COUNT + 1))
-        fi
+        _plan_add_app "$app" "$bundle"
 
     done <<< "$RESOLVED_APPS"
 
     while IFS='|' read -r app bundle reason; do
         [[ -z "$app" ]] && continue
-
-        app_name="$(app_field "$app" NAME)"
-        PLAN_SKIPPED+="$app|$app_name|$bundle|$reason"$'\n'
-        PLAN_SKIP_COUNT=$((PLAN_SKIP_COUNT + 1))
-
+        _plan_add_skip "$app" "$bundle" "$reason"
     done <<< "$RESOLVED_SKIPPED"
+
+    while IFS= read -r app; do
+        [[ -z "$app" ]] && continue
+
+        # Already decided through a bundle (any track) → nothing to add
+        if grep -q "^$app|" <<< "$PLAN_APPS$PLAN_MANUAL$PLAN_SKIPPED"; then
+            continue
+        fi
+
+        if reason="$(app_incompatibility_reason "$app")"; then
+            _plan_add_app "$app" "hardware"
+        else
+            _plan_add_skip "$app" "hardware" "$reason"
+        fi
+
+    done <<< "$extras"
 
     PLAN_READY=1
 }
 
+# build_deployment_plan PROFILE [EXCLUDED] [EXTRAS] [BUNDLES]
+# BUNDLES overrides the profile's bundle list (bundle review may drop some);
+# omitted or empty = every bundle the profile references.
 build_deployment_plan() {
     local profile="$1"
+    local bundles="${4:-}"
 
     if ! profile_exists "$profile"; then
         error_msg "❌ El perfil no existe: $profile"
         return 1
     fi
 
+    [[ -n "$bundles" ]] || bundles="$(profile_bundles "$profile")"
+
     build_plan_for_bundles \
         "$profile" \
         "$(profile_field "$profile" NAME)" \
         "$(profile_field "$profile" DESCRIPTION)" \
-        "$(profile_bundles "$profile")"
+        "$bundles" \
+        "${2:-}" \
+        "${3:-}"
 }
 
-# build_custom_plan BUNDLES(newline-separated IDs)
+# build_custom_plan BUNDLES [EXCLUDED] [EXTRAS]
 build_custom_plan() {
     build_plan_for_bundles \
         "custom" \
         "Personalizado" \
         "Perfil personalizado compuesto por bundles seleccionados" \
-        "$1"
+        "$1" \
+        "${2:-}" \
+        "${3:-}"
 }
 
 # =========================
@@ -159,7 +220,8 @@ export_deployment_plan() {
 
     {
         echo "# JB Toolkit — Deployment Plan"
-        echo "# Formato: APP=id|nombre|bundle|tipo|paquete · SKIP=id|nombre|bundle|motivo · PICK=id"
+        echo "# Formato: APP=id|nombre|origen|método|paquete · MANUAL=id|nombre|origen|método|url"
+        echo "#          SKIP=id|nombre|origen|motivo · PICK=id"
         echo "PLAN_ID=$PLAN_ID"
         echo "CREATED=$PLAN_CREATED"
         echo "PROFILE_ID=$PLAN_PROFILE_ID"
@@ -171,12 +233,17 @@ export_deployment_plan() {
         printf "%s" "$PLAN_BUNDLES" | tr '\n' ' ' | sed 's/ $//'
         echo ""
         echo "APP_COUNT=$PLAN_APP_COUNT"
+        echo "MANUAL_COUNT=$PLAN_MANUAL_COUNT"
         echo "SKIP_COUNT=$PLAN_SKIP_COUNT"
         echo "PICK_COUNT=$PLAN_PICK_COUNT"
 
         while IFS= read -r line; do
             [[ -n "$line" ]] && echo "APP=$line"
         done <<< "$PLAN_APPS"
+
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && echo "MANUAL=$line"
+        done <<< "$PLAN_MANUAL"
 
         while IFS= read -r line; do
             [[ -n "$line" ]] && echo "SKIP=$line"

@@ -17,12 +17,14 @@
 #   TXN_START / TXN_END / TXN_DURATION
 #   TXN_ATTEMPTED       apps handed to the engine
 #   TXN_INSTALLED       apps CONFIRMED installed afterward (verified count)
-#   TXN_ALREADY         apps already present before execution
-#   TXN_SKIPPED         plan-level compatibility skips (carried for the record)
-#   TXN_FAILED          apps that did not verify after the engine ran
-#   TXN_CANCELLED       true when the user backed out at the final gate
+#   TXN_ALREADY         apps verified present before execution
+#   TXN_SKIPPED         plan-level skips (compatibility + deselections)
+#   TXN_MANUAL          apps that require a manual installation step
+#   TXN_FAILED          apps that did not verify, or were unavailable
+#   TXN_CANCELLED       true when the user backed out at a gate
 #   TXN_RESULT          success | partial | failed | cancelled
-#   TXN_INSTALLED_APPS / TXN_FAILED_APPS   "id|name" per line
+#   TXN_INSTALLED_APPS / TXN_ALREADY_APPS / TXN_MANUAL_APPS  "id|name"
+#   TXN_FAILED_APPS     "id|name|reason" — every failure carries its cause
 
 TXN_ID=""
 TXN_SESSION=""
@@ -36,10 +38,13 @@ TXN_ATTEMPTED=0
 TXN_INSTALLED=0
 TXN_ALREADY=0
 TXN_SKIPPED=0
+TXN_MANUAL=0
 TXN_FAILED=0
 TXN_CANCELLED="false"
 TXN_RESULT=""
 TXN_INSTALLED_APPS=""
+TXN_ALREADY_APPS=""
+TXN_MANUAL_APPS=""
 TXN_FAILED_APPS=""
 
 _TXN_START_EPOCH=0
@@ -59,10 +64,13 @@ txn_begin() {
     TXN_INSTALLED=0
     TXN_ALREADY=0
     TXN_SKIPPED="$PLAN_SKIP_COUNT"
+    TXN_MANUAL=0
     TXN_FAILED=0
     TXN_CANCELLED="false"
     TXN_RESULT=""
     TXN_INSTALLED_APPS=""
+    TXN_ALREADY_APPS=""
+    TXN_MANUAL_APPS=""
     TXN_FAILED_APPS=""
 
     _TXN_START_EPOCH=$(date +%s)
@@ -89,7 +97,8 @@ txn_export() {
 
     {
         echo "# JB Toolkit — Installation Transaction"
-        echo "# Formato: INSTALLED_APP=id|nombre · FAILED_APP=id|nombre"
+        echo "# Formato: INSTALLED_APP/ALREADY_APP/MANUAL_APP=id|nombre"
+        echo "#          FAILED_APP=id|nombre|motivo"
         echo "TXN_ID=$TXN_ID"
         echo "SESSION=$TXN_SESSION"
         echo "PROFILE=$TXN_PROFILE"
@@ -102,6 +111,7 @@ txn_export() {
         echo "INSTALLED=$TXN_INSTALLED"
         echo "ALREADY_INSTALLED=$TXN_ALREADY"
         echo "SKIPPED=$TXN_SKIPPED"
+        echo "MANUAL=$TXN_MANUAL"
         echo "FAILED=$TXN_FAILED"
         echo "CANCELLED=$TXN_CANCELLED"
         echo "RESULT=$TXN_RESULT"
@@ -109,6 +119,14 @@ txn_export() {
         while IFS= read -r line; do
             [[ -n "$line" ]] && echo "INSTALLED_APP=$line"
         done <<< "$TXN_INSTALLED_APPS"
+
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && echo "ALREADY_APP=$line"
+        done <<< "$TXN_ALREADY_APPS"
+
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && echo "MANUAL_APP=$line"
+        done <<< "$TXN_MANUAL_APPS"
 
         while IFS= read -r line; do
             [[ -n "$line" ]] && echo "FAILED_APP=$line"

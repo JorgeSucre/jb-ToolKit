@@ -10,6 +10,7 @@ source "$BASE_DIR/core/utils.sh"
 
 init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
+source "$BASE_DIR/core/bootstrap/hardware.sh"
 source "$BASE_DIR/core/deployment/catalog.sh"
 source "$BASE_DIR/core/deployment/doctor.sh"
 source "$BASE_DIR/core/deployment/resolve.sh"
