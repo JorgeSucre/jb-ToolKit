@@ -335,7 +335,7 @@ update_external_packages() {
 
         [[ -z "$pkg" ]] && continue
 
-        pkg_name=$(awk '{print $1}' <<< "$pkg")
+        pkg_name="${pkg%% *}"
 
         if ! grep -Fqx "brew:${pkg_name}" <<< "$EXTRA_PACKAGES" \
             && ! grep -Fqx "cask:${pkg_name}" <<< "$EXTRA_PACKAGES"; then
@@ -428,7 +428,7 @@ update_toolkit_packages() {
 
         [[ -z "$pkg" ]] && continue
 
-        pkg_name=$(awk '{print $1}' <<< "$pkg")
+        pkg_name="${pkg%% *}"
 
         echo "   • $pkg_name"
 

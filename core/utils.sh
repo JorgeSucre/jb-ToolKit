@@ -533,6 +533,7 @@ command_exists() {
 parse_selection() {
     local input="$1" max="$2"
     local part start end n
+    local -a _ps_parts
 
     input="${input// /}"
     [[ -z "$input" ]] && return 0
