@@ -36,7 +36,9 @@ Details that matter:
 
 ## Module 1 — Bootstrap (`core/bootstrap.sh`)
 
-Five user-visible stages (`print_stage`, counter `[n/5]` with per-stage elapsed time).
+Five user-visible stages (`print_stage`, counter `[n/5]` with per-stage elapsed
+time). Bootstrap owns the machine's base tooling; all software selection lives in
+the Deployment library, reached through the onboarding wizard.
 
 ```mermaid
 flowchart TD
@@ -47,27 +49,20 @@ flowchart TD
     D -->|fail| ABORT2([print_completion false, exit 1])
     D --> E[configure_brew + validate_brew<br/>resolve BREW_BIN, eval shellenv]
     E --> F[Stage 2: update_brew_indexes<br/>skip if FETCH_HEAD < 24h old]
-    F --> G[Stage 3: detect_rosetta + print_hardware_summary]
-    G --> H[select_brewfile: arch variant<br/>Brewfile.apple / Brewfile.intel fallback]
-    H --> I[offer_hardware_recommendations<br/>machine-family package suggestions]
-    I --> J[select_optional_packages<br/>interactive multi-select]
-    J --> K[Stage 4: prepare_brewfile → /tmp copy]
-    K --> L[filter_brewfile_to_selection<br/>keep fastfetch + selected; validate result]
-    L -->|fail| ABORT3([cleanup + exit 1])
-    L --> M[build_external_package_list<br/>installed vs Brewfile diff]
-    M --> N[ask_external_package_updates]
-    N --> O[build_outdated_package_list<br/>cached brew outdated ∩ Brewfile]
-    O --> P[update_toolkit_packages<br/>brew upgrade each + cleanup + brew_cache_reset]
-    P --> Q[update_external_packages<br/>fresh outdated query, user-approved only]
-    Q --> R[sync_brewfile: retry 3× brew bundle]
-    R -->|fail| ABORT4([cleanup + exit 1])
-    R --> S[Verify fastfetch actually installed]
-    S -->|missing| ABORT5([exit 1])
-    S --> T[Stage 5: summaries, cleanup temp Brewfile,<br/>print_completion]
+    F --> G[ensure_base_tools: fastfetch via the engine,<br/>verified after install]
+    G -->|missing after install| ABORT3([print_completion false, exit 1])
+    G --> H[offer_package_updates:<br/>preview → confirm → upgrade each →<br/>verify remaining with fresh query]
+    H --> I[Stage 3: detect_rosetta + print_hardware_summary]
+    I --> J[Stage 4: run_onboarding_wizard<br/>validate catalog → ¿Cómo se usará este Mac?]
+    J -->|Omitir| K
+    J -->|profile / custom| DEP[Deployment flow:<br/>bundle review → hardware extras →<br/>planner → confirmation → installer]
+    DEP --> K[Stage 5: optimization summary,<br/>final result, print_completion]
 ```
 
 Bootstrap is the only module with hard abort points: everything downstream of a
-missing Homebrew or failed bundle would be meaningless.
+missing Homebrew or missing base tools would be meaningless. An invalid catalog
+does **not** abort Bootstrap — the wizard is skipped with a warning, because the
+base setup is still valuable.
 
 ## Module 2 — Diagnostics (`core/diagnostics.sh`)
 
@@ -113,31 +108,38 @@ The decline path is a first-class flow: preview → "no" → zero mutations → 
 flowchart TD
     A[Validate catalog V1–V10<br/>invalid = abort, name the files] --> B[Main menu: categories from data<br/>+ Personalizado + JB Picks, ≤7 entries]
     B -->|category| C{Collapse rule}
-    C -->|single profile, no SUBCATEGORY| E[build_deployment_plan]
-    C -->|multiple profiles| D[Submenu by SUBCATEGORY/ORDER] --> E
-    B -->|Personalizado| F[Bundle multi-select<br/>parse_selection] --> G[build_custom_plan] --> H
+    C -->|single profile, no SUBCATEGORY| REV
+    C -->|multiple profiles| D[Submenu by SUBCATEGORY/ORDER] --> REV
+    B -->|Personalizado| F[Bundle multi-select<br/>parse_selection] --> REV
     B -->|JB Picks| P[Read-only browser:<br/>★★★★★ + mandatory notes] --> B
-    E --> H[Confirmation screen:<br/>bundles, counts, named skips]
-    H -->|E| X[Explain view: provenance + reasons] --> H
-    H -->|G| T[Tree view: catalog structure<br/>+ dedup/skip annotations] --> H
+    REV[Bundle review, per bundle:<br/>1 instalar todo · 2 personalizar<br/>per-app toggles · 3 omitir] --> HW[Hardware recommendations:<br/>HW_RECOMMEND ∩ this machine,<br/>not yet installed]
+    HW --> E[Planner: bundles kept + exclusions + extras →<br/>automatic track, manual track, named skips]
+    E --> H[Confirmation screen: bundles,<br/>automatic/manual/pick/skip counts]
+    H -->|E| X[Explain view: provenance,<br/>manual steps + URLs, reasons] --> H
+    H -->|G| T[Tree view: catalog structure<br/>+ dedup/manual/skip annotations] --> H
     H -->|0| B
     H -->|I| GATE{ask_yes_no:<br/>¿Preparar este equipo?}
     GATE -->|no| CANC[Cancelled transaction recorded] --> H
-    GATE -->|yes| EXPORT[Export plan → logs/] --> PART[Partition: already installed<br/>vs pending, from plan pkg specs]
-    PART -->|nothing pending| DONE
-    PART --> ENG[Engine: temp Brewfile +<br/>retry 3 5 brew bundle]
+    GATE -->|yes| EXPORT[Export plan → logs/] --> PART[Partition: already installed<br/>brew query / Applications check]
+    PART --> PRE[Pre-flight, read-only:<br/>brew info per pending package<br/>✓ available · ❌ no disponible · ✋ manual]
+    PRE -->|unavailable found| GATE2{¿Continuar sin ellas?}
+    GATE2 -->|no| CANC
+    GATE2 -->|yes| ENG
+    PRE -->|all available| ENG[Engine PER APP:<br/>retry 3 5 brew install / --cask]
     ENG --> VERIFY[brew_cache_reset →<br/>per-app verification]
     VERIFY --> DONE[Transaction + state.env +<br/>result screen: named outcomes]
-    DONE --> B
+    DONE --> URLS[Offer download page<br/>per manual app] --> B
 ```
 
 The planner is the only decision-maker; the installer executes plan records
-verbatim (they carry package specs — it never reads the catalog). Results are
-**verified outcomes**: installed counts come from a fresh Homebrew query, failures
-and skips are named, and the Installation Transaction
+verbatim (they carry method + package specs — it never reads the catalog). Each
+application installs independently: one failure or unavailable package never
+aborts the rest. Results are **verified outcomes**: installed counts come from a
+fresh Homebrew query, manual steps are named and never counted as failures,
+failures carry their reasons, and the Installation Transaction
 (`logs/deployment_txn_*.env`) records what actually happened. CLI: `--validate`,
 `--doctor`, `--resolve`, `--explain`, `--tree`, `--plan` — six representations of
-the same plan.
+the same plan (CLI plans take every bundle; the review is interactive-only).
 
 ## Module 5 — Report (`core/report.sh`)
 

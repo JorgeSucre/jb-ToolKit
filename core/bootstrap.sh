@@ -17,8 +17,21 @@ init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 source "$BASE_DIR/core/bootstrap/stages.sh"
 source "$BASE_DIR/core/bootstrap/brew.sh"
-source "$BASE_DIR/core/bootstrap/packages.sh"
 source "$BASE_DIR/core/bootstrap/hardware.sh"
+
+# Deployment library — Bootstrap's software step consumes the same
+# catalog, planner, and installer as the Deployment module. Bootstrap
+# owns no software selection of its own.
+source "$BASE_DIR/core/deployment/catalog.sh"
+source "$BASE_DIR/core/deployment/resolve.sh"
+source "$BASE_DIR/core/deployment/planner.sh"
+source "$BASE_DIR/core/deployment/render.sh"
+source "$BASE_DIR/core/deployment/menu.sh"
+source "$BASE_DIR/core/deployment/confirm.sh"
+source "$BASE_DIR/core/deployment/transaction.sh"
+source "$BASE_DIR/core/deployment/install.sh"
+source "$BASE_DIR/core/bootstrap/wizard.sh"
+
 set_ui_context "Bootstrap"
 
 STATE_FILE="$BASE_DIR/logs/state.env"
@@ -86,74 +99,35 @@ BREW_OK=1
 print_stage "Configurando Homebrew"
 update_brew_indexes || info "ℹ️ Se intentará continuar con los índices disponibles"
 
+if ! ensure_base_tools; then
+    print_completion "false"
+    exit 1
+fi
+
+offer_package_updates
+
 print_stage "Detectando hardware"
 detect_rosetta
 print_hardware_summary
-select_brewfile || exit 1
 
-offer_hardware_recommendations
-select_optional_packages
-
-print_stage "Sincronizando paquetes"
-
-prepare_brewfile
-if [[ ! -f "$TEMP_BREWFILE" ]]; then
-    error_msg "❌ No se pudo preparar el Brewfile"
-    exit 1
-fi
-if ! filter_brewfile_to_selection; then
-    cleanup_brewfile
-    print_completion "false"
-    exit 1
-fi
-
-EXPECTED_PACKAGES=$(grep '^brew ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
-EXPECTED_CASKS=$(grep '^cask ' "$TEMP_BREWFILE" 2>/dev/null | awk -F'"' '{print $2}' || true)
-
-INSTALLED_BREW=$(brew_list_formula)
-INSTALLED_CASKS=$(brew_list_cask)
-
-build_external_package_list
-print_external_package_summary
-ask_external_package_updates
-
-build_outdated_package_list
-print_outdated_summary
-update_toolkit_packages
-update_external_packages
-
-if ! sync_brewfile; then
-    error_msg "❌ No se pudo completar brew bundle"
-    cleanup_brewfile
-    print_completion "false"
-    exit 1
-fi
-
-if ! brew list --formula fastfetch >/dev/null 2>&1; then
-    error_msg "❌ fastfetch no quedó instalado después de brew bundle"
-    cleanup_brewfile
-    print_completion "false"
-    exit 1
-fi
-print_installed_summary
-
-print_optimization_summary
+print_stage "Preparando el equipo"
+run_onboarding_wizard
 
 print_stage "Finalizando setup"
+
+print_optimization_summary
 
 print_section "🧠 Resultado final"
 
 success "• Entorno base configurado correctamente"
 
-if (( BREW_OK )); then
-    success "• Herramientas sincronizadas"
+if [[ -n "$TXN_RESULT" && "$TXN_RESULT" != "cancelled" ]]; then
+    success "• Software desplegado con el perfil ${PLAN_PROFILE_NAME:-N/A}"
 else
-    warn "• Homebrew no pudo configurarse automáticamente"
+    info "• Despliegue de software omitido"
 fi
 
 success "• Perfil optimizado para este hardware"
-
-cleanup_brewfile
 
 ELAPSED=$SECONDS
 

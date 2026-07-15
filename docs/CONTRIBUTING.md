@@ -16,9 +16,14 @@ applies those principles to day-to-day decisions.
 1. **Keep the architecture modular.** Four (soon five) top-level modules run as
    independent child processes under the `jb` launcher. Each module is a complete,
    self-contained workflow.
-2. **Never let modules depend on each other.** Bootstrap must not know Maintenance
-   exists. No module sources, calls, or reads the internals of another. If two modules
-   need the same logic, it belongs in the foundation layer (`core/utils.sh`).
+2. **Never let module orchestrators depend on each other.** Bootstrap must not know
+   Maintenance exists. No module runs, calls, or reads the internals of another
+   module's orchestrator. If two modules need the same small logic, it belongs in
+   the foundation layer (`core/utils.sh`). Two subsystems are **shared function
+   libraries**, not module internals: `core/bootstrap/ui.sh` (the UI layer for all
+   modules) and `core/deployment/*` (the Deployment library — catalog, planner,
+   installer — sourced by both `deployment.sh` and `bootstrap.sh`, so software
+   selection and installation exist exactly once).
 3. **`state.env` is the only cross-module communication mechanism.** Data that must
    outlive a module run is written with `write_state_values` and read with
    `state_value`. There is no other channel — no shared temp files, no exported
@@ -115,8 +120,9 @@ Two tiers, applied consistently:
   `|| warn "⚠️ …"` when the user should know. A failed `killall Dock` never aborts
   a run.
 - **Fatal** — the module's remaining work is meaningless without it (no internet, no
-  Homebrew, corrupted temp Brewfile): print an `error_msg`, `print_completion
-  "false"`, exit non-zero.
+  Homebrew, base tools missing after install): print an `error_msg`,
+  `print_completion "false"`, exit non-zero. One application failing to install is
+  **not** fatal — deployments continue and record the failure with its reason.
 
 Network operations retry (`retry 3 5 cmd…` — note: 3 **total** attempts). Decide the
 tier deliberately; don't default everything to `|| true`.
@@ -166,12 +172,15 @@ tier pattern.
 **Deployment catalog** — the catalog is data, governed by the contracts in
 [Catalog-Format.md](Catalog-Format.md). The rules that matter most: an application
 is a **directory** (`catalog/applications/<id>/app.conf`) so it can grow assets
-later; a Homebrew package name exists in exactly **one** `app.conf` line; bundles
-reference application IDs; profiles reference bundle IDs and place themselves in the
-menu via `CATEGORY`/`SUBCATEGORY` — menus regenerate from data, never from code.
-`JB_PICK=true` without a `JB_PICK_NOTE` is invalid: a recommendation without its
-reasoning is just a favorite. Keep every file flat `KEY=value`, human-editable in
-any text editor — no YAML, no JSON, no SQLite. See
+later; every application declares its `INSTALL_METHOD` (`brew`/`cask` are
+automated; `mas`/`pkg`/`dmg`/`manual` are honest manual steps, never failures); a
+package identifier exists in exactly **one** `app.conf` line, and you verify it
+against the real installation method (`brew info --formula/--cask`) before
+committing it; bundles reference application IDs; profiles reference bundle IDs
+and place themselves in the menu via `CATEGORY`/`SUBCATEGORY` — menus regenerate
+from data, never from code. `JB_PICK=true` without a `JB_PICK_NOTE` is invalid: a
+recommendation without its reasoning is just a favorite. Keep every file flat
+`KEY=value`, human-editable in any text editor — no YAML, no JSON, no SQLite. See
 [Deployment-Design.md](Deployment-Design.md) for the architecture.
 
 ## Testing expectations

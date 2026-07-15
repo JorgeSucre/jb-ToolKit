@@ -182,70 +182,80 @@ update_brew_indexes() {
     fi
 }
 
-select_brewfile() {
+# Base CLI tools the toolkit itself depends on (Diagnostics and Report use
+# fastfetch). Installed through the engine pattern and verified afterward.
+ensure_base_tools() {
 
-    if [[ -f "$BASE_DIR/Brewfile" ]]; then
-        BREWFILE="$BASE_DIR/Brewfile"
-    elif [[ -f "$BASE_DIR/brewfile" ]]; then
-        BREWFILE="$BASE_DIR/brewfile"
-    else
-        error_msg "❌ No se encontró Brewfile ni brewfile"
-        return 1
-    fi
-    ARCH_NAME="$(uname -m)"
-
-    if [[ "$ARCH_NAME" == "arm64" ]]; then
-
-        [[ -f "$BASE_DIR/Brewfile.apple" ]] && BREWFILE="$BASE_DIR/Brewfile.apple"
-
-        info "🧠 Perfil Apple Silicon detectado"
-
-    else
-
-        [[ -f "$BASE_DIR/Brewfile.intel" ]] && BREWFILE="$BASE_DIR/Brewfile.intel"
-
-        info "🧠 Perfil Intel detectado"
-    fi
-}
-
-prepare_brewfile() {
-
-    TEMP_BREWFILE="/tmp/jb_brewfile.$$"
-
-    cp "$BREWFILE" "$TEMP_BREWFILE" || return 1
-
-}
-
-sync_brewfile() {
-
-    INSTALL_COUNT=$(grep -Ec '^(brew|cask) ' "$TEMP_BREWFILE" 2>/dev/null \
-        || true)
-    INSTALL_COUNT=${INSTALL_COUNT:-0}
-
-    log "📦 Aplicando $(basename "$BREWFILE")..."
-
-    echo ""
-
-    info "ℹ️ Instalando ${INSTALL_COUNT} paquetes y aplicaciones... esto puede tardar varios minutos"
-    info "ℹ️ Homebrew mostrará progreso automáticamente"
-
-    echo ""
-
-    if retry 3 5 run_cmd --visible "$BREW_BIN" bundle --file="$TEMP_BREWFILE"; then
-
-        success "✔ Brewfile sincronizado correctamente"
-
+    if brew_formula_installed "fastfetch"; then
+        success "✔ fastfetch disponible"
         return 0
     fi
 
-    warn "⚠️ Brew bundle encontró algunos problemas"
+    log "📦 Instalando fastfetch (herramienta base del toolkit)..."
 
+    if ! HOMEBREW_NO_ENV_HINTS=1 retry 3 5 run_cmd --visible brew install fastfetch; then
+        warn "⚠️ La instalación de fastfetch reportó errores"
+    fi
+
+    brew_cache_reset
+
+    if brew_formula_installed "fastfetch"; then
+        success "✔ fastfetch instalado y verificado"
+        return 0
+    fi
+
+    error_msg "❌ fastfetch no quedó instalado"
     return 1
 }
 
-cleanup_brewfile() {
+# Pending updates for everything Homebrew manages on this machine.
+# Preview → confirm → upgrade each → verify with a fresh outdated query.
+offer_package_updates() {
 
-    if [[ -n "${TEMP_BREWFILE:-}" ]]; then
-        rm -f "$TEMP_BREWFILE" 2>/dev/null || true
+    local pkg pkg_name count remaining
+    local -a queue=()
+
+    print_section "📚 Actualizaciones pendientes"
+
+    while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] && queue+=("$pkg")
+    done <<< "$(brew_outdated_formula)"$'\n'"$(brew_outdated_cask)"
+
+    count="${#queue[@]}"
+
+    if [[ "$count" -eq 0 ]]; then
+        success "✔ No se detectaron actualizaciones pendientes"
+        return 0
+    fi
+
+    warn "📋 $count paquetes tienen actualizaciones disponibles"
+    echo ""
+
+    for pkg in "${queue[@]}"; do
+        echo "   • ${pkg%% *}"
+    done
+    echo ""
+
+    if ! ask_yes_no "¿Actualizar ahora?"; then
+        info "ℹ️ Actualizaciones omitidas"
+        return 0
+    fi
+
+    for pkg in "${queue[@]}"; do
+        pkg_name="${pkg%% *}"
+        echo "   • $pkg_name"
+        brew_upgrade_package "$pkg_name" || warn "⚠️ No se pudo actualizar $pkg_name"
+    done
+
+    run_cmd brew cleanup -s || warn "⚠️ Homebrew cleanup no pudo completarse"
+    brew_cache_reset
+
+    remaining=$(( $(brew_outdated_formula | grep -c . || true) \
+        + $(brew_outdated_cask | grep -c . || true) ))
+
+    if [[ "$remaining" -eq 0 ]]; then
+        success "✔ Todos los paquetes quedaron actualizados"
+    else
+        warn "⚠️ Quedan $remaining paquetes sin actualizar"
     fi
 }

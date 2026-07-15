@@ -41,7 +41,7 @@ run_script() {
 # =========================
 pause() {
     echo ""
-    read -r -p "Presiona Enter para volver al menú..." _
+    read -r -p "Presiona Enter para volver al menú..." _ || true
 }
 
 trap 'echo ""; echo "👋 Saliendo..."; exit 0' INT
@@ -63,7 +63,7 @@ while true; do
     echo "6) Exit"
     echo ""
 
-    read -r -p "Option: " opt
+    read -r -p "Option: " opt || { echo ""; echo "👋 Saliendo..."; exit 0; }
     opt="$(echo "$opt" | xargs)"  # trim spaces
     echo ""
 

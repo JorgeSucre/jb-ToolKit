@@ -51,8 +51,8 @@ commands:
 1. Quotes the full command (`shell_quote_command`, `printf %q`) and logs it as `CMD`.
 2. Runs it with `set +e` protection, capturing output to a temp file.
    - Default: output hidden from the terminal.
-   - `--visible`: output streamed via `tee` (used for Homebrew installer and
-     `brew bundle`, which show progress).
+   - `--visible`: output streamed via `tee` (used for the Homebrew installer and
+     per-application `brew install`, which show progress).
 3. Appends the captured output to the session log, indented four spaces.
 4. Logs `EXIT <code>` and returns the real exit code to the caller.
 

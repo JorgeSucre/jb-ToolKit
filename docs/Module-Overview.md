@@ -36,8 +36,12 @@ launch/exit and survives module failures. `chmod +x`es core scripts defensively.
 ## Bootstrap subsystem
 
 ### `core/bootstrap.sh` — Orchestrator
-Linear setup flow with 5 staged sections and hard abort points. Also defines
-`install_clt` (Command Line Tools with 5-minute polling) and the admin-rights check.
+Linear setup flow with 5 staged sections and hard abort points: base tools (CLT,
+Homebrew), Homebrew configuration (indexes, verified fastfetch install, pending
+updates), hardware detection, the onboarding wizard, and finalization. Sources the
+**Deployment library** (`core/deployment/*`) so the wizard uses the same catalog,
+planner, and installer as the Deployment module. Also defines `install_clt`
+(Command Line Tools with 5-minute polling) and the admin-rights check.
 
 ### `core/bootstrap/stages.sh`
 `print_stage` — `[n/TOTAL]` progress header with previous-stage elapsed time.
@@ -46,22 +50,15 @@ Linear setup flow with 5 staged sections and hard abort points. Also defines
 `check_internet_connection`, `install_brew` (3 attempts, official installer,
 `--visible`), `configure_brew` (resolve `BREW_BIN`, eval `shellenv`),
 `validate_brew`, `update_brew_indexes` (skips when FETCH_HEAD < 24 h),
-`select_brewfile` (arch variants), `prepare_brewfile` (temp copy),
-`sync_brewfile` (`retry 3 5 … brew bundle`), `cleanup_brewfile`.
+`ensure_base_tools` (fastfetch through the engine pattern, verified afterward),
+`offer_package_updates` (preview → confirm → upgrade each → verify remaining
+count with a fresh outdated query).
 
-### `core/bootstrap/packages.sh`
-Optional-package catalog (`OPTIONAL_PACKAGE_IDS`/`LABELS`), selection helpers
-(`parse_package_selection`, `select_optional_packages`, `add_selected_package`),
-install-state inspection (`package_install_state` → installed/update/not_installed),
-hardware recommendations (`offer_hardware_recommendations`),
-Brewfile filtering with integrity validation (`filter_brewfile_to_selection` —
-fastfetch always retained, every selection verified present),
-external-package handling (`build_external_package_list`,
-`print_external_package_summary`, `ask_external_package_updates`,
-`update_external_packages`), outdated-package handling (`append_outdated`,
-`build_outdated_package_list`, `print_outdated_summary`,
-`update_toolkit_packages` — ends with `brew_cache_reset`),
-`print_installed_summary`.
+### `core/bootstrap/wizard.sh`
+`run_onboarding_wizard` — Bootstrap's software step. Validates the catalog, asks
+one question ("¿Cómo se usará este Mac?") generated from catalog categories, and
+dispatches into the Deployment flows (`open_category`, `run_custom_flow`). Owns no
+software selection logic; ends when a deployment executes or the technician skips.
 
 ### `core/bootstrap/hardware.sh`
 `detect_rosetta` (filesystem check, `pkgutil` fallback; Apple Silicon only),
@@ -123,7 +120,8 @@ All writes are user-domain `defaults`; `killall Dock` applies Dock changes.
 ## Deployment subsystem
 
 See [Deployment-Architecture.md](Deployment-Architecture.md) for the pipeline and
-layer contracts.
+layer contracts. The sub-module files are a **shared library**: sourced by
+`deployment.sh` (launcher option 4) and by `bootstrap.sh` (the onboarding wizard).
 
 ### `core/deployment.sh` — Dispatcher (launcher menu option 4)
 Small by design: sources the sub-modules and dispatches. Interactive entry
@@ -138,8 +136,10 @@ file/key → empty, exit 0 — safe under `set -e`); existence checks are explic
 Field access (`catalog_field`/`app_field`/`profile_field`), listers, bundle and
 profile readers, hierarchy queries for menu generation (`list_categories`,
 `profiles_in_category`, `category_direct_profile` — the collapse rule,
-`list_jb_picks`), and `validate_catalog` implementing rules V1–V10 with per-file,
-per-rule Spanish messages. `JB_CATALOG_DIR` overrides the catalog root (testing).
+`list_jb_picks`, `apps_recommended_for_hardware` — `HW_RECOMMEND` matching), and
+`validate_catalog` implementing rules V1–V10 (including the `INSTALL_METHOD`
+contract) with per-file, per-rule Spanish messages. `JB_CATALOG_DIR` overrides
+the catalog root (testing).
 
 ### `core/deployment/resolve.sh`
 `resolve_apps_for_bundles` (bundle order, line order, first-occurrence dedupe,
@@ -156,27 +156,36 @@ validation failure (hard rules stay in the validator).
 
 ### `core/deployment/planner.sh`
 Builds the **Deployment Plan** — the official contract between every layer; the
-only decision-making layer. `build_deployment_plan <profile>` / `build_custom_plan
-<bundles>` populate the `PLAN_*` globals: plan identity (`PLAN_ID`), machine
-compatibility context, bundles, apps with provenance **and package specs**
-(`id|name|bundle|pkg-type|pkg-name` — the installer never reads the catalog),
-named skips, JB Picks, counts. `export_deployment_plan` serializes to
-`logs/deployment_plan_<id>.env` (human-readable, retained ×20).
+only decision-making layer. `build_deployment_plan <profile> [excluded] [extras]
+[bundles]` / `build_custom_plan <bundles> [excluded] [extras]` populate the
+`PLAN_*` globals: plan identity (`PLAN_ID`), machine compatibility context,
+bundles, the automatic track (`PLAN_APPS` — `id|name|source|method|package`; the
+installer never reads the catalog), the manual track (`PLAN_MANUAL` —
+`id|name|source|method|download-url`; mas/pkg/dmg/manual apps, never failures),
+named skips (compatibility + technician deselections), JB Picks, counts.
+`export_deployment_plan` serializes to `logs/deployment_plan_<id>.env`
+(human-readable, retained ×20).
 
 ### `core/deployment/render.sh`
 Pure presentation; renders catalog/plan/transaction data, never resolves or
 mutates. Element renderers (`render_category`, `render_profile`, `render_bundle`,
-`render_application`, `render_jb_pick`) and view renderers: `render_plan_summary`
-(concise), `render_plan` (explain: provenance + skip reasons + pick notes),
-`render_plan_tree` (developer tree with dedup/skip annotations),
-`render_confirmation` (pre-install summary), `render_transaction` (verified
-result: installed/failed named, skips, timing).
+`render_application`, `render_jb_pick`, `plan_source_label`,
+`manual_step_label`) and view renderers: `render_plan_summary` (concise),
+`render_plan` (explain: provenance + manual steps with URLs + skip reasons +
+pick notes), `render_plan_tree` (developer tree with dedup/manual/skip
+annotations), `render_confirmation` (pre-install summary: automatic vs manual
+counts), `render_transaction` (verified result: every outcome named —
+installed, already installed, manual, skipped, failed with reasons).
 
 ### `core/deployment/menu.sh`
 Navigation generated entirely from catalog data — no hardcoded names.
 `run_deployment_menu` (categories + Personalizado + JB Picks, ≤7 entries),
-`open_category` (submenu or collapse), `run_custom_flow` (bundle multi-select via
-`parse_selection`), `show_jb_picks` (read-only browser).
+`open_category` (submenu or collapse), `run_bundle_review` (per-bundle gate:
+install all / customize / skip; `_customize_bundle` is a per-app toggle loop),
+`offer_hardware_extras` (catalog apps whose `HW_RECOMMEND` matches this machine
+and aren't installed), `run_custom_flow` (bundle multi-select via
+`parse_selection`, then the same review), `show_jb_picks` (read-only browser).
+Screens collect decisions; the planner applies them.
 
 ### `core/deployment/confirm.sh`
 `run_plan_confirmation`: the final review screen — `[E]` explain, `[G]` tree,
@@ -186,18 +195,24 @@ back. Cancellation or a blocked install returns to the review; execution ends it
 ### `core/deployment/transaction.sh`
 The **Installation Transaction** — the execution record, separate from the plan.
 `txn_begin` / `txn_finish` / `txn_export` capture session id, profile, plan id and
-file, timing, attempted/installed/already/skipped/failed counts, named outcomes,
-cancellation, and the result (`success|partial|failed|cancelled`). Persisted to
-`logs/deployment_txn_<id>.env` (retained ×20) and pointed to from `state.env`.
-Future Reports, Support Bundles, and History consume this record.
+file, timing, attempted/installed/already/skipped/manual/failed counts, named
+outcomes per category (failures carry their reason: `id|name|reason`),
+cancellation, and the result (`success|partial|failed|cancelled` — manual steps
+never degrade the result). Persisted to `logs/deployment_txn_<id>.env` (retained
+×20) and pointed to from `state.env`. Future Reports, Support Bundles, and
+History consume this record.
 
 ### `core/deployment/install.sh`
 Executes an already-built plan; **makes no decisions** — no resolution, no
 compatibility rules, no catalog reads. Partitions installed/pending from plan
-package specs, compiles a temporary Brewfile, invokes the same engine pattern
-Bootstrap uses (`retry 3 5 run_cmd --visible brew bundle`), then verifies each app
-against a fresh Homebrew query (`brew_cache_reset`) and records confirmed outcomes
-in the transaction and `state.env`.
+records (Homebrew queries for the automatic track, `/Applications` existence for
+the manual track), runs a **read-only pre-flight** that verifies every pending
+package against Homebrew's index before anything is modified (unavailable
+packages become named failures behind a continue/abort gate), then installs
+**each application individually** through the engine pattern (`retry 3 5 run_cmd
+--visible brew install [--cask]`), verifies each app against a fresh Homebrew
+query (`brew_cache_reset`), records confirmed outcomes in the transaction and
+`state.env`, and finally offers to open each manual app's download page.
 
 ## Reporting
 

@@ -42,10 +42,10 @@ consolidation makes the code **smaller** (see principle 7).
 
 Behavior branches on detected hardware, not on user configuration:
 
-- Brewfile variant selection by architecture (`Brewfile.apple` / `Brewfile.intel`).
-- Package recommendations by machine family (`offer_hardware_recommendations`:
-  AlDente for MacBooks, Macs Fan Control for desktops, BetterDisplay when an external
-  display is present).
+- Package recommendations by machine family (`HW_RECOMMEND` in the catalog +
+  `offer_hardware_extras`: AlDente for MacBooks, Macs Fan Control for desktops,
+  BetterDisplay when an external display is present) — the matching machines are
+  catalog data, not code.
 - App risk scoring weights Intel-only binaries only on Apple Silicon.
 - Rosetta detection runs only on Apple Silicon; Siri tweaks only on Intel.
 - `get_device_profile` normalizes: laptops always report a battery.
@@ -56,11 +56,12 @@ Two failure tiers, consistently applied:
 
 - **Absorbed:** cosmetic or best-effort operations use `2>/dev/null || true` or
   `|| warn`. A failed `killall Dock` or an unreadable directory never stops a run.
-- **Fatal:** missing internet, missing Homebrew after install attempts, or a corrupted
-  temp Brewfile abort with `print_completion "false"` and non-zero exit, because every
-  later step depends on them.
+- **Fatal:** missing internet, missing Homebrew after install attempts, or base
+  tools that fail verification abort with `print_completion "false"` and non-zero
+  exit, because every later step depends on them. A single application failing to
+  install is explicitly **not** fatal: deployments continue and record the failure.
 
-Network operations retry with backoff (`retry 3 5 …` for `brew bundle`, a 3-attempt
+Network operations retry with backoff (`retry 3 5 …` per `brew install`, a 3-attempt
 loop for the Homebrew installer, `curl --retry 3`).
 
 ## 6. Expensive queries run once per process
