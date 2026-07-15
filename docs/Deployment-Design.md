@@ -1,7 +1,8 @@
 # Deployment — Design Document
 
-Status: **DESIGN APPROVED — Phase 2 delivered (documentation + catalog data).**
-No installation code exists yet. Implementation follows the phased plan at the end.
+Status: **DESIGN APPROVED — Phases 2–3 delivered (docs, catalog data, loaders +
+validator).** No installation code and no launcher menu entry exist yet.
+Implementation follows the phased plan at the end.
 
 ## Thesis
 
@@ -315,7 +316,7 @@ begins before the previous one is reviewed.
 |---|---|---|
 | **1 — Foundations** | CONTRIBUTING.md; this design | ✅ Delivered |
 | **2 — Contracts + data** | [Catalog-Format.md](Catalog-Format.md) data contracts; `catalog/` scaffolded: application directories, bundles, profiles, vendor placeholder; resolution diagrams; doc updates. **Pure documentation and data — no code** | ✅ Delivered |
-| **3 — Loaders** | `core/deployment/catalog.sh` + `resolve.sh`: parse, validate (dangling IDs, duplicate IDs, BREW/CASK exclusivity, JB_PICK note rule), resolve profile → filtered app set; a `--validate` mode that walks the whole catalog | Pending |
+| **3 — Loaders** | `core/deployment/catalog.sh` + `resolve.sh`: parse, validate (dangling IDs, duplicate IDs, BREW/CASK exclusivity, JB_PICK note rule), resolve profile → filtered app set; a `--validate` mode that walks the whole catalog. CLI-only entry `core/deployment.sh` (`--validate`, `--resolve <perfil>`), **not** wired into the launcher | ✅ Delivered |
 | **4 — Interactive module** | `core/deployment.sh` menus generated from the catalog hierarchy (categories, subcategories, Custom, JB Picks browser) wired into the `jb` launcher; ends at the confirmation screen with an "installation engine pending" notice | Pending |
 | **5 — Installation engine** | `install.sh`: Brewfile compilation, hand-off to the Bootstrap engine pattern, per-app verification, state keys, Report integration | Pending |
 

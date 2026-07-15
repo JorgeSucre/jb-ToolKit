@@ -25,9 +25,9 @@ designs — no implementation details are prescribed here.
 
 | Goal | Intent | Status |
 |---|---|---|
-| **Deployment system** | Push complete configurations to a prepared Mac in one operation | Designed ([Deployment-Design.md](Deployment-Design.md)); catalog data scaffolded; **no code** |
-| **Reusable Bundles** | Named package groups applied as units | Data contract + files exist ([Catalog-Format.md](Catalog-Format.md)); no loader |
-| **Workstation Profiles** | Role-based machine definitions composed of bundles | Data contract + files exist; no loader |
+| **Deployment system** | Push complete configurations to a prepared Mac in one operation | Designed ([Deployment-Design.md](Deployment-Design.md)); loaders + validator + resolution CLI exist; **no menus, no installer** |
+| **Reusable Bundles** | Named package groups applied as units | Loader implemented (`core/deployment/catalog.sh`); resolution working |
+| **Workstation Profiles** | Role-based machine definitions composed of bundles | Loader + compatibility-filtered resolution implemented (`--resolve`) |
 | **JB Picks** | Curated recommendations with mandatory reasoning | Metadata on application records; browser UI pending |
 | **Application Catalog** | Structured per-app metadata beyond the flat Brewfile | Directory-per-application scaffolded; validator pending |
 | **Vendor presets** | Per-organization compositions of profiles | Reserved space only (`catalog/vendors/`) — not designed yet |

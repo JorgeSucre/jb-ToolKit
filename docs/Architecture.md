@@ -23,6 +23,11 @@ jb-ToolKit/
     ├── maintenance.sh      # Module 3: cleanup + optimization
     ├── report.sh           # Module 4: executive report + PDF
     ├── report_pdf.py       # PDF generator (Python / reportlab)
+    ├── deployment.sh       # Module 5 (partial): catalog CLI — --validate / --resolve
+    │                       #   NOT in the launcher menu yet (Deployment Phase 4 pending)
+    ├── deployment/         # Deployment sub-modules
+    │   ├── catalog.sh      # Catalog accessors + V1–V10 validator
+    │   └── resolve.sh      # Profile → filtered install set (named skips)
     ├── bootstrap/          # Bootstrap sub-modules
     │   ├── ui.sh           # Shared UI primitives (used by ALL modules)
     │   ├── stages.sh       # Numbered stage progress ([1/5], elapsed time)
@@ -48,6 +53,7 @@ jb-ToolKit/
 | **Diagnostics** | `core/diagnostics.sh` | System summary, top processes, health score, state write |
 | **Maintenance** | `core/maintenance.sh` + `core/maintenance/*` | Preview-confirm-clean workflow, storage analysis, app cleanup, performance profiles, post-score |
 | **Reporting** | `core/report.sh`, `core/report_pdf.py` | Terminal executive report; optional PDF built from `state.env` + system snapshot |
+| **Deployment** *(partial)* | `core/deployment.sh` + `core/deployment/*` | Catalog validation and profile resolution (CLI only; menus and installation pending — see [Deployment-Design.md](Deployment-Design.md)) |
 | **State** | `logs/state.env` | Key-value persistence across module processes and sessions |
 
 ## Module dependency graph

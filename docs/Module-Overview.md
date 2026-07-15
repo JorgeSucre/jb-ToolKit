@@ -120,6 +120,32 @@ All writes are user-domain `defaults`; `killall Dock` applies Dock changes.
 `save_maintenance_state` (persist all keys), `print_maintenance_summary`
 (tiered outcome message, freed space, items, profile, score delta).
 
+## Deployment subsystem (Phases 3–5; CLI-only today)
+
+### `core/deployment.sh` — CLI entry (NOT in the launcher menu yet)
+Phase 3 tooling only: `--validate` walks the whole catalog against the
+[Catalog-Format.md](Catalog-Format.md) rules; `--resolve <perfil>` prints the
+resolved install set with named compatibility skips. Without arguments it announces
+that the interactive module is pending. Menus arrive in Phase 4; installation in
+Phase 5.
+
+### `core/deployment/catalog.sh`
+Read-only catalog access and the validator. Accessors are tolerant (missing
+file/key → empty, exit 0 — safe under `set -e`); existence checks are explicit
+(`app_exists`, `bundle_exists`, `profile_exists`). Functions: `catalog_field` /
+`app_field` / `profile_field` (state_value-style awk lookup), `list_applications` /
+`list_bundles` / `list_profiles`, `bundle_display_name`, `bundle_apps`,
+`profile_bundles`, and `validate_catalog` implementing rules V1–V10 with per-file,
+per-rule Spanish error messages. `JB_CATALOG_DIR` overrides the catalog root
+(testing affordance).
+
+### `core/deployment/resolve.sh`
+`resolve_profile_apps` (bundles in BUNDLES order, line order, first-occurrence
+dedupe), `app_incompatibility_reason` (ARCHS vs `uname -m`, MIN_MACOS vs `sw_vers`
+major; prints the Spanish skip reason), `resolve_install_set` → populates
+`RESOLVED_APPS` and `RESOLVED_SKIPPED` (`id|reason` lines). Skips are always
+recorded, never silent.
+
 ## Reporting
 
 ### `core/report.sh` — Orchestrator
