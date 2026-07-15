@@ -1,7 +1,7 @@
 # JB Toolkit — Engineering Documentation
 
 This directory is the official engineering reference for JB Toolkit. It describes the
-architecture **as implemented today** (v0.9, pre-1.0). It is written for future
+architecture **as implemented today** (v2.0.1). It is written for future
 contributors and AI assistants who need to understand, maintain, or extend the project
 without reverse-engineering it from source.
 

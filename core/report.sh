@@ -215,6 +215,7 @@ if [[ "$DEPLOYED_PROFILE_STATE" != "N/A" ]]; then
 
     LAST_DEPLOYMENT_STATE="$(state_value LAST_DEPLOYMENT)"
     DEPLOYMENT_INSTALLED_STATE="$(state_value DEPLOYMENT_APPS_INSTALLED)"
+    DEPLOYMENT_MANUAL_STATE="$(state_value DEPLOYMENT_APPS_MANUAL)"
     DEPLOYMENT_FAILED_STATE="$(state_value DEPLOYMENT_APPS_FAILED)"
 
     if [[ "$LAST_DEPLOYMENT_STATE" != "N/A" ]]; then
@@ -223,6 +224,10 @@ if [[ "$DEPLOYED_PROFILE_STATE" != "N/A" ]]; then
 
     if [[ "$DEPLOYMENT_INSTALLED_STATE" != "N/A" ]]; then
         echo "• Aplicaciones instaladas: $DEPLOYMENT_INSTALLED_STATE"
+    fi
+
+    if [[ "$DEPLOYMENT_MANUAL_STATE" =~ ^[0-9]+$ && "$DEPLOYMENT_MANUAL_STATE" -gt 0 ]]; then
+        echo "• Requieren instalación manual: $DEPLOYMENT_MANUAL_STATE"
     fi
 
     if [[ "$DEPLOYMENT_FAILED_STATE" =~ ^[0-9]+$ && "$DEPLOYMENT_FAILED_STATE" -gt 0 ]]; then

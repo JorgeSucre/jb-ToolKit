@@ -4,16 +4,23 @@ This document separates what **exists today** from what is **planned**, and reco
 known inconsistencies for future consideration. Planned items are goals, not
 designs — no implementation details are prescribed here.
 
-## Implemented today (v0.9)
+## Implemented today (v2.0.1)
 
 - Interactive launcher with five modules: Bootstrap, Diagnostics, Maintenance, Deployment, Report
-- Workstation deployment: catalog-driven profiles/bundles, Deployment Planner with
-  plan export, JB Picks browser, Catalog Doctor, installation through the Bootstrap
-  engine with per-app verification, Installation Transaction records
-- Homebrew lifecycle: install, validate, index refresh, Brewfile sync with
-  architecture variants, session-level query caching with post-mutation invalidation
-- Optional-package catalog with interactive multi-select and range syntax (`1,3-5`)
-- Hardware-based package recommendations by machine family
+- Workstation deployment: catalog-driven profiles/bundles with the generic
+  `INSTALL_METHOD` model (brew/cask automated; mas/pkg/dmg/manual as first-class
+  manual steps), interactive bundle review (install all / customize per app /
+  skip), read-only pre-flight validation, per-application resilient installation
+  with verified outcomes, Deployment Planner with plan export, JB Picks browser,
+  Catalog Doctor, Installation Transaction records with per-category named
+  outcomes and failure reasons
+- Bootstrap as an onboarding wizard over the Deployment library: base tools (CLT,
+  Homebrew, verified fastfetch), pending-update offer, hardware detection, one
+  catalog-generated question, then the shared planner and installer
+- Homebrew lifecycle: install, validate, index refresh, session-level query
+  caching with post-mutation invalidation
+- Hardware-based package recommendations by machine family, encoded as catalog
+  data (`HW_RECOMMEND`)
 - Health score (CPU / RAM / disk) with baseline tracking across runs
 - Preview-confirm cleanup with **confirmed** (re-counted) deletion accounting
 - Storage analysis: large files, cloud-sync detection, LaunchAgents listing
@@ -29,18 +36,17 @@ designs — no implementation details are prescribed here.
 | Goal | Intent | Status |
 |---|---|---|
 | **Deployment history** | Browse past Installation Transactions | Records exist (`logs/deployment_txn_*.env`); `history.sh` browser pending |
-| **Application Catalog** | Structured per-app metadata beyond the flat Brewfile | Directory-per-application scaffolded; validator pending |
+| **Automated `mas`/`pkg`/`dmg` installs** | Extend the engine beyond brew/cask | Catalog and plan already carry the method; only the execution branch in `install.sh` is missing |
 | **Vendor presets** | Per-organization compositions of profiles | Reserved space only (`catalog/vendors/`) — not designed yet |
 | **Plugin-like architecture** | Third-party/module extension points without touching core | Idea only |
 | **Cross-platform readiness** | Isolate macOS-specific calls so future non-macOS targets are feasible | Idea only |
 | **Improved reporting** | Richer PDF, historical trends, comparison between visits | Idea only |
 
-Architectural note for implementers: the deployment installation engine is the
-**existing Bootstrap machinery** (temp Brewfile + `brew bundle` + retry + verify) —
-Deployment resolves data and orchestrates; it never installs on its own. The other
-existing seams remain the Brewfile-variant selection (`select_brewfile`), the
-optional-package arrays (`OPTIONAL_PACKAGE_IDS`/`LABELS`), and the machine-family
-recommendation matrix.
+Architectural note for implementers: the installation engine is the per-application
+pattern in `core/deployment/install.sh` (`retry 3 5 run_cmd --visible brew install
+[--cask]` + post-run verification) — Deployment resolves data and orchestrates;
+nothing else in the toolkit installs software. New installation methods extend the
+engine's `method` branch, never bypass it.
 
 ## Potential Future Improvements
 
@@ -50,9 +56,8 @@ are release blockers; several were consciously accepted.
 1. **`ui.sh` location.** The UI layer for all modules lives under `core/bootstrap/`.
    A future move to `core/ui.sh` would match its actual role; deferred because the
    churn touches every module for zero behavior change.
-2. **Banner version string.** `print_banner` hardcodes `v0.9` in the format string
-   while `JB_VERSION` exists in utils.sh. A version bump currently requires touching
-   both.
+2. **Banner version string.** ~~`print_banner` hardcodes the version~~ Resolved in
+   v2.0.1: the banner renders `$JB_VERSION`; a version bump touches only utils.sh.
 3. **Strict-mode inconsistency.** `bootstrap.sh` and `report.sh` use
    `set -Eeuo pipefail`; `maintenance.sh` omits `-e` (a failing cleanup step must not
    abort the run — arguably intentional); `diagnostics.sh` omits `-u`. Worth unifying

@@ -55,7 +55,8 @@ flowchart LR
 | `DEPLOYED_PROFILE` | deployment | report | Profile ID of the last executed deployment |
 | `LAST_DEPLOYMENT` | deployment | report | Timestamp of the last deployment execution |
 | `DEPLOYMENT_APPS_INSTALLED` | deployment | report | **Confirmed** newly-installed count (post-verification) |
-| `DEPLOYMENT_APPS_FAILED` | deployment | report | Apps that did not verify after `brew bundle` |
+| `DEPLOYMENT_APPS_MANUAL` | deployment | report | Apps requiring a manual installation step (never counted as failures) |
+| `DEPLOYMENT_APPS_FAILED` | deployment | report | Apps that did not verify after installation, or were unavailable in Homebrew |
 | `LAST_DEPLOYMENT_PLAN` | deployment | — | Basename of the exported plan (`logs/deployment_plan_*.env`) |
 | `LAST_DEPLOYMENT_TRANSACTION` | deployment | future history/support | Basename of the execution record (`logs/deployment_txn_*.env`) |
 

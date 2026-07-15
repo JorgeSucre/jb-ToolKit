@@ -6,7 +6,7 @@
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export BASE_DIR
 export STATE_FILE="$BASE_DIR/logs/state.env"
-export JB_VERSION="${JB_VERSION:-0.9}"
+export JB_VERSION="${JB_VERSION:-2.0.1}"
 mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
 
 # =========================
