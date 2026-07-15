@@ -244,10 +244,9 @@ generate_system_snapshot() {
     ram_gb="$(awk -v bytes="$total_bytes" 'BEGIN {printf "%.0f GB", bytes/1024/1024/1024}')"
 
     local disk_total disk_used disk_avail disk_pct disk_name filesystem
-    disk_total="$(df -H / 2>/dev/null | awk 'NR==2 {print $2}')"
-    disk_used="$(df -H / 2>/dev/null | awk 'NR==2 {print $3}')"
-    disk_avail="$(df -H / 2>/dev/null | awk 'NR==2 {print $4}')"
-    disk_pct="$(df -H / 2>/dev/null | awk 'NR==2 {print $5}')"
+    local _df_raw
+    _df_raw="$(df -H / 2>/dev/null | awk 'NR==2 {print $2, $3, $4, $5}')"
+    read -r disk_total disk_used disk_avail disk_pct <<< "$_df_raw"
 
     disk_total="$(echo "$disk_total" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')"
     disk_used="$(echo "$disk_used" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')"

@@ -93,14 +93,10 @@ echo "${USED_RAM_GB}GB / ${TOTAL_RAM_GB}GB (${RAM_PCT}%)"
 echo ""
 echo "Disco:"
 
-DISK_INFO=$(df -H / 2>/dev/null | tail -1)
+_df_raw="$(df -H / 2>/dev/null | awk 'NR==2 {print $2, $3, $4, $5}')"
+read -r DISK_TOTAL DISK_USED DISK_AVAIL DISK_PERCENT <<< "$_df_raw"
 
-if [[ -n "$DISK_INFO" ]]; then
-
-    DISK_TOTAL=$(echo "$DISK_INFO" | awk '{print $2}')
-    DISK_USED=$(echo "$DISK_INFO" | awk '{print $3}')
-    DISK_AVAIL=$(echo "$DISK_INFO" | awk '{print $4}')
-    DISK_PERCENT=$(echo "$DISK_INFO" | awk '{print $5}')
+if [[ -n "$DISK_TOTAL" ]]; then
 
     DISK_TOTAL_FRIENDLY=$(echo "$DISK_TOTAL" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')
     DISK_USED_FRIENDLY=$(echo "$DISK_USED" | sed 's/G/ GB/; s/M/ MB/; s/T/ TB/')
