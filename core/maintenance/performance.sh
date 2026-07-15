@@ -59,11 +59,11 @@ apply_light_optimization() {
 
 apply_aggressive_optimization() {
 
-    PERFORMANCE_PROFILE="aggressive"
-
     log "⚡ Aplicando optimización agresiva..."
 
     apply_light_optimization "true"
+
+    PERFORMANCE_PROFILE="aggressive"
 
     # Personalized ads
     defaults write com.apple.AdLib \

@@ -64,7 +64,7 @@ calculate_health_score() {
         spec_pages=${spec_pages:-0}
         free_mb=$(((free_pages + spec_pages) * 4096 / 1024 / 1024))
         if [[ "$total_mb" -gt 0 ]]; then
-            mem_pressure=$((100 - (free_mb * 100 / total_mb)))
+            mem_pressure=$((free_mb * 100 / total_mb))
         else
             mem_pressure=0
         fi
