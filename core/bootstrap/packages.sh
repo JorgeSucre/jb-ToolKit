@@ -439,6 +439,7 @@ update_toolkit_packages() {
     done <<< "$TOOLKIT_OUTDATED"
 
     run_cmd brew cleanup -s || warn "⚠️ Homebrew cleanup no pudo completarse"
+    brew_cache_reset
 
     echo ""
 

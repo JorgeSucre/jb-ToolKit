@@ -490,6 +490,17 @@ brew_upgrade_package() {
     HOMEBREW_NO_ENV_HINTS=1 run_cmd brew upgrade "$1"
 }
 
+brew_cache_reset() {
+    _BREW_LIST_FORMULA=""
+    _BREW_LIST_CASK=""
+    _BREW_OUTDATED_FORMULA=""
+    _BREW_OUTDATED_CASK=""
+    _BREW_LIST_FORMULA_LOADED=0
+    _BREW_LIST_CASK_LOADED=0
+    _BREW_OUTDATED_FORMULA_LOADED=0
+    _BREW_OUTDATED_CASK_LOADED=0
+}
+
 retry() {
     local retries=$1 delay=$2; shift 2
     local cmd=("$@")
