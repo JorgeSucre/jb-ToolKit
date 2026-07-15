@@ -39,10 +39,6 @@ resolve_apps_for_bundles() {
     printf "%s" "$list"
 }
 
-resolve_profile_apps() {
-    resolve_apps_for_bundles "$(profile_bundles "$1")"
-}
-
 # =========================
 # Compatibility filter
 # =========================
@@ -103,8 +99,4 @@ resolve_install_set_for_bundles() {
         fi
 
     done < <(resolve_apps_for_bundles "$bundles")
-}
-
-resolve_install_set() {
-    resolve_install_set_for_bundles "$(profile_bundles "$1")"
 }

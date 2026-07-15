@@ -120,13 +120,17 @@ All writes are user-domain `defaults`; `killall Dock` applies Dock changes.
 `save_maintenance_state` (persist all keys), `print_maintenance_summary`
 (tiered outcome message, freed space, items, profile, score delta).
 
-## Deployment subsystem (planning complete; installation pending)
+## Deployment subsystem
+
+See [Deployment-Architecture.md](Deployment-Architecture.md) for the pipeline and
+layer contracts.
 
 ### `core/deployment.sh` — Dispatcher (launcher menu option 4)
 Small by design: sources the sub-modules and dispatches. Interactive entry
-validates the catalog, then runs the menu loop. CLI tools for catalog
-maintenance: `--validate` (full V1–V10 walk), `--resolve <perfil>` (explain
-view), `--tree <perfil>` (tree view). **Nothing here modifies the system.**
+validates the catalog, then runs the menu loop. CLI commands — each a different
+representation of the same Deployment Plan: `--validate`, `--doctor`,
+`--resolve <perfil>` (summary), `--explain <perfil>` (provenance), `--tree
+<perfil>`, `--plan <perfil>` (serialized export).
 
 ### `core/deployment/catalog.sh`
 Read-only catalog access and the validator. Accessors are tolerant (missing
@@ -144,21 +148,29 @@ per-rule Spanish messages. `JB_CATALOG_DIR` overrides the catalog root (testing)
 `resolve_install_set_for_bundles` → `RESOLVED_APPS` (`id|bundle`) and
 `RESOLVED_SKIPPED` (`id|bundle|reason`). Skips always recorded, never silent.
 
+### `core/deployment/doctor.sh`
+Catalog Doctor: advisory maintainability diagnostics on a valid catalog —
+unreferenced applications, single-app bundles, apps in multiple bundles,
+single-bundle profiles, single-profile categories. Suggestions only; never a
+validation failure (hard rules stay in the validator).
+
 ### `core/deployment/planner.sh`
-Builds the **Deployment Plan** — the contract between planning and the future
-installer (see [Deployment-Design.md](Deployment-Design.md)). `build_deployment_plan
-<profile>` / `build_custom_plan <bundles>` populate the `PLAN_*` globals: profile
-identity, machine compatibility context, bundles, apps with provenance in install
-order, named skips, JB Picks, verified counts. No system access beyond `uname`/
-`sw_vers`.
+Builds the **Deployment Plan** — the official contract between every layer; the
+only decision-making layer. `build_deployment_plan <profile>` / `build_custom_plan
+<bundles>` populate the `PLAN_*` globals: plan identity (`PLAN_ID`), machine
+compatibility context, bundles, apps with provenance **and package specs**
+(`id|name|bundle|pkg-type|pkg-name` — the installer never reads the catalog),
+named skips, JB Picks, counts. `export_deployment_plan` serializes to
+`logs/deployment_plan_<id>.env` (human-readable, retained ×20).
 
 ### `core/deployment/render.sh`
-Pure presentation; renders catalog/plan data, never resolves or mutates. Element
-renderers (`render_category`, `render_profile`, `render_bundle`,
-`render_application`, `render_jb_pick`) and plan renderers: `render_plan`
-(explain view: provenance + skip reasons + pick notes), `render_plan_tree`
-(developer tree with dedup/skip annotations), `render_confirmation` (summary with
-installation explicitly disabled).
+Pure presentation; renders catalog/plan/transaction data, never resolves or
+mutates. Element renderers (`render_category`, `render_profile`, `render_bundle`,
+`render_application`, `render_jb_pick`) and view renderers: `render_plan_summary`
+(concise), `render_plan` (explain: provenance + skip reasons + pick notes),
+`render_plan_tree` (developer tree with dedup/skip annotations),
+`render_confirmation` (pre-install summary), `render_transaction` (verified
+result: installed/failed named, skips, timing).
 
 ### `core/deployment/menu.sh`
 Navigation generated entirely from catalog data — no hardcoded names.
@@ -167,8 +179,25 @@ Navigation generated entirely from catalog data — no hardcoded names.
 `parse_selection`), `show_jb_picks` (read-only browser).
 
 ### `core/deployment/confirm.sh`
-`run_plan_confirmation`: the final planning screen — `[E]` explain, `[G]` tree,
-`[I]` install (disabled with an honest notice until Phase 5), `[0]` back.
+`run_plan_confirmation`: the final review screen — `[E]` explain, `[G]` tree,
+`[I]` install (runs the installer; a y/n gate inside is the last stop), `[0]`
+back. Cancellation or a blocked install returns to the review; execution ends it.
+
+### `core/deployment/transaction.sh`
+The **Installation Transaction** — the execution record, separate from the plan.
+`txn_begin` / `txn_finish` / `txn_export` capture session id, profile, plan id and
+file, timing, attempted/installed/already/skipped/failed counts, named outcomes,
+cancellation, and the result (`success|partial|failed|cancelled`). Persisted to
+`logs/deployment_txn_<id>.env` (retained ×20) and pointed to from `state.env`.
+Future Reports, Support Bundles, and History consume this record.
+
+### `core/deployment/install.sh`
+Executes an already-built plan; **makes no decisions** — no resolution, no
+compatibility rules, no catalog reads. Partitions installed/pending from plan
+package specs, compiles a temporary Brewfile, invokes the same engine pattern
+Bootstrap uses (`retry 3 5 run_cmd --visible brew bundle`), then verifies each app
+against a fresh Homebrew query (`brew_cache_reset`) and records confirmed outcomes
+in the transaction and `state.env`.
 
 ## Reporting
 

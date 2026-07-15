@@ -196,16 +196,17 @@ Todas las acciones quedan registradas para futuras referencias.
 
 ## 4. Deployment
 
-Prepara equipos completos mediante perfiles de trabajo (beta — planificación):
+Prepara equipos completos mediante perfiles de trabajo:
 
 - Perfiles por tipo de equipo: Home, Office, Professional, Technician, Developer
 - Bundles reutilizables de aplicaciones seleccionadas por JB Repair
 - JB Picks: recomendaciones curadas con su justificación
 - Perfil personalizado combinando bundles
 - Revisión completa del plan antes de cualquier cambio
+- Instalación con verificación por aplicación y registro de la ejecución
 
-La instalación automática del plan estará disponible en una próxima versión;
-por ahora el módulo planifica y muestra exactamente qué se instalaría.
+Cada despliegue queda documentado: el plan exportado y el registro de la
+transacción se guardan en logs/ para soporte y auditoría.
 
 ---
 

@@ -23,15 +23,17 @@ jb-ToolKit/
     ├── maintenance.sh      # Module 3: cleanup + optimization
     ├── report.sh           # Module 4: executive report + PDF
     ├── report_pdf.py       # PDF generator (Python / reportlab)
-    ├── deployment.sh       # Module 5: deployment planning (launcher option 4)
-    │                       #   Installation intentionally disabled until Phase 5
-    ├── deployment/         # Deployment sub-modules
+    ├── deployment.sh       # Module 5: workstation deployment (launcher option 4)
+    ├── deployment/         # Deployment sub-modules (see docs/Deployment-Architecture.md)
     │   ├── catalog.sh      # Catalog access, hierarchy queries, V1–V10 validator
+    │   ├── doctor.sh       # Advisory maintainability diagnostics
     │   ├── resolve.sh      # Bundles → apps with provenance, compatibility filter
-    │   ├── planner.sh      # Deployment Plan builder (PLAN_* contract)
-    │   ├── render.sh       # Presentation: explain / tree / confirmation views
+    │   ├── planner.sh      # Deployment Plan builder + export (PLAN_* contract)
+    │   ├── render.sh       # Presentation: summary/explain/tree/confirmation/result
     │   ├── menu.sh         # Catalog-generated navigation, Custom, JB Picks browser
-    │   └── confirm.sh      # Confirmation loop (install disabled)
+    │   ├── confirm.sh      # Confirmation loop; [I] executes the plan
+    │   ├── transaction.sh  # Installation Transaction (execution record)
+    │   └── install.sh      # Plan executor via the Bootstrap engine + verification
     ├── bootstrap/          # Bootstrap sub-modules
     │   ├── ui.sh           # Shared UI primitives (used by ALL modules)
     │   ├── stages.sh       # Numbered stage progress ([1/5], elapsed time)
@@ -57,7 +59,7 @@ jb-ToolKit/
 | **Diagnostics** | `core/diagnostics.sh` | System summary, top processes, health score, state write |
 | **Maintenance** | `core/maintenance.sh` + `core/maintenance/*` | Preview-confirm-clean workflow, storage analysis, app cleanup, performance profiles, post-score |
 | **Reporting** | `core/report.sh`, `core/report_pdf.py` | Terminal executive report; optional PDF built from `state.env` + system snapshot |
-| **Deployment** *(planning only)* | `core/deployment.sh` + `core/deployment/*` | Catalog-driven menus, Deployment Planner, explain/tree/confirmation views; installation pending (Phase 5 — see [Deployment-Design.md](Deployment-Design.md)) |
+| **Deployment** | `core/deployment.sh` + `core/deployment/*` | Catalog-driven menus, Deployment Planner, plan review, execution via the Bootstrap engine, Installation Transaction record (see [Deployment-Architecture.md](Deployment-Architecture.md)) |
 | **State** | `logs/state.env` | Key-value persistence across module processes and sessions |
 
 ## Module dependency graph

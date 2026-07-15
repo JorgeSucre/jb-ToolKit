@@ -6,7 +6,10 @@ designs — no implementation details are prescribed here.
 
 ## Implemented today (v0.9)
 
-- Interactive launcher with four modules: Bootstrap, Diagnostics, Maintenance, Report
+- Interactive launcher with five modules: Bootstrap, Diagnostics, Maintenance, Deployment, Report
+- Workstation deployment: catalog-driven profiles/bundles, Deployment Planner with
+  plan export, JB Picks browser, Catalog Doctor, installation through the Bootstrap
+  engine with per-app verification, Installation Transaction records
 - Homebrew lifecycle: install, validate, index refresh, Brewfile sync with
   architecture variants, session-level query caching with post-mutation invalidation
 - Optional-package catalog with interactive multi-select and range syntax (`1,3-5`)
@@ -25,10 +28,7 @@ designs — no implementation details are prescribed here.
 
 | Goal | Intent | Status |
 |---|---|---|
-| **Deployment system** | Push complete configurations to a prepared Mac in one operation | **Planning UX complete** (menus, planner, explain/tree, confirmation, launcher option 4); **installer pending** (Phase 5) |
-| **Reusable Bundles** | Named package groups applied as units | Implemented through resolution and the Custom flow |
-| **Workstation Profiles** | Role-based machine definitions composed of bundles | Implemented: browsable, plannable, reviewable — not yet installable |
-| **JB Picks** | Curated recommendations with mandatory reasoning | Implemented: metadata + read-only browser in the Deployment menu |
+| **Deployment history** | Browse past Installation Transactions | Records exist (`logs/deployment_txn_*.env`); `history.sh` browser pending |
 | **Application Catalog** | Structured per-app metadata beyond the flat Brewfile | Directory-per-application scaffolded; validator pending |
 | **Vendor presets** | Per-organization compositions of profiles | Reserved space only (`catalog/vendors/`) — not designed yet |
 | **Plugin-like architecture** | Third-party/module extension points without touching core | Idea only |

@@ -20,8 +20,9 @@ without reverse-engineering it from source.
 | [Reporting.md](Reporting.md) | Terminal report, system snapshot, and executive PDF pipeline |
 | [Future-Roadmap.md](Future-Roadmap.md) | What exists vs. what is planned; known future improvements |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Engineering handbook: philosophy, style, extension points, prohibitions |
-| [Deployment-Design.md](Deployment-Design.md) | **Design (code not implemented):** Deployment module, orchestration pipeline, hierarchy, JB Picks, vendor layer, phased plan |
-| [Catalog-Format.md](Catalog-Format.md) | **Normative data contracts** for `catalog/`: file formats, fields, validation rules |
+| [Deployment-Architecture.md](Deployment-Architecture.md) | The deployment pipeline: layers, the Plan and Transaction contracts, invariants, where future work belongs |
+| [Deployment-Design.md](Deployment-Design.md) | Design history of the Deployment module: decisions, phases, rationale |
+| [Catalog-Format.md](Catalog-Format.md) | **Normative data contracts** for `catalog/`: file formats, fields, validation rules, doctor advisories |
 
 ## Ground rules for contributors
 

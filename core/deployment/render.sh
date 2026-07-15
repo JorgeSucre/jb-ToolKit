@@ -84,10 +84,9 @@ render_plan() {
     echo ""
     echo "Aplicaciones ($PLAN_APP_COUNT):"
 
-    while IFS='|' read -r id name bundle; do
+    while IFS='|' read -r id name bundle _ptype _ppkg; do
         [[ -z "$id" ]] && continue
-        printf "   ✓ %s\n" "$name"
-        printf "       desde %s\n" "$(bundle_display_name "$bundle")"
+        render_application "$id" "$bundle"
     done <<< "$PLAN_APPS"
 
     if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
@@ -155,7 +154,7 @@ render_plan_tree() {
             app_index=$((app_index + 1))
 
             annotation=""
-            if grep -q "^$app|.*|$bundle\$" <<< "$PLAN_APPS"; then
+            if grep -q "^$app|[^|]*|$bundle|" <<< "$PLAN_APPS"; then
                 :   # provided by this bundle — no annotation
             elif grep -q "^$app|" <<< "$PLAN_APPS"; then
                 annotation=" (ya incluido por otro bundle)"
@@ -175,7 +174,38 @@ render_plan_tree() {
     done <<< "$PLAN_BUNDLES"
 }
 
-# Confirmation summary: the final Phase 4 screen
+# Concise resolution summary (--resolve): what would happen, no provenance
+render_plan_summary() {
+
+    [[ "$PLAN_READY" -eq 1 ]] || return 0
+
+    local id name bundle reason _ptype _ppkg
+
+    print_section "📦 Resolución: $PLAN_PROFILE_NAME"
+
+    printf "%s\n" "$PLAN_PROFILE_DESC"
+    printf "Equipo: %s · macOS %s\n" "$PLAN_ARCH" "$PLAN_MACOS"
+
+    echo ""
+    echo "Instalaría ($PLAN_APP_COUNT):"
+
+    while IFS='|' read -r id name bundle _ptype _ppkg; do
+        [[ -z "$id" ]] && continue
+        printf "   • %s\n" "$name"
+    done <<< "$PLAN_APPS"
+
+    if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
+        echo ""
+        echo "Omitiría ($PLAN_SKIP_COUNT):"
+
+        while IFS='|' read -r id name bundle reason; do
+            [[ -z "$id" ]] && continue
+            printf "   • %s — %s\n" "$name" "$reason"
+        done <<< "$PLAN_SKIPPED"
+    fi
+}
+
+# Confirmation summary: the final planning screen
 render_confirmation() {
 
     [[ "$PLAN_READY" -eq 1 ]] || return 0
@@ -196,12 +226,68 @@ render_confirmation() {
     done <<< "$PLAN_BUNDLES"
 
     echo ""
-    printf "Aplicaciones a instalar:  %s\n" "$PLAN_APP_COUNT"
+    printf "Aplicaciones en el plan:  %s\n" "$PLAN_APP_COUNT"
     printf "JB Picks incluidos:       %s\n" "$PLAN_PICK_COUNT"
     printf "Omitidas:                 %s\n" "$PLAN_SKIP_COUNT"
-    printf "Descarga estimada:        disponible en la próxima fase\n"
 
     echo ""
     success "✔ Planificación completa"
-    info "ℹ️ La instalación se habilitará en la próxima fase"
+}
+
+# Result screen: consumes the Installation Transaction (verified outcomes
+# only — the plan said what would happen; this shows what actually did)
+render_transaction() {
+
+    local line id name bundle reason
+
+    print_section "📦 Resultado del despliegue"
+
+    printf "Perfil: %s\n" "$PLAN_PROFILE_NAME"
+
+    echo ""
+
+    if [[ "$TXN_ATTEMPTED" -eq 0 ]]; then
+        success "✔ Todas las aplicaciones del plan ya estaban instaladas"
+    else
+        printf "Instaladas: %s de %s\n" "$TXN_INSTALLED" "$TXN_ATTEMPTED"
+    fi
+
+    if [[ "$TXN_INSTALLED" -gt 0 ]]; then
+        echo ""
+        while IFS='|' read -r id name; do
+            [[ -z "$id" ]] && continue
+            printf "   ✓ %s\n" "$name"
+        done <<< "$TXN_INSTALLED_APPS"
+    fi
+
+    if [[ "$TXN_FAILED" -gt 0 ]]; then
+        echo ""
+        echo "Fallidas:"
+        while IFS='|' read -r id name; do
+            [[ -z "$id" ]] && continue
+            printf "   ❌ %s — no quedó instalada tras brew bundle\n" "$name"
+        done <<< "$TXN_FAILED_APPS"
+    fi
+
+    if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
+        echo ""
+        echo "Omitidas por compatibilidad:"
+        while IFS='|' read -r id name bundle reason; do
+            [[ -z "$id" ]] && continue
+            printf "   • %s — %s\n" "$name" "$reason"
+        done <<< "$PLAN_SKIPPED"
+    fi
+
+    echo ""
+    printf "Ya estaban instaladas: %s\n" "$TXN_ALREADY"
+    print_elapsed_time "$TXN_DURATION"
+
+    echo ""
+    case "$TXN_RESULT" in
+        success) success "✔ Despliegue completado correctamente" ;;
+        partial) warn "⚠️ Despliegue completado con fallos; revisa las aplicaciones fallidas" ;;
+        failed)  error_msg "❌ El despliegue no pudo instalar aplicaciones" ;;
+    esac
+
+    info "ℹ️ Registro: logs/deployment_${TXN_ID}.env"
 }

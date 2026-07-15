@@ -11,21 +11,44 @@ source "$BASE_DIR/core/utils.sh"
 init_session
 source "$BASE_DIR/core/bootstrap/ui.sh"
 source "$BASE_DIR/core/deployment/catalog.sh"
+source "$BASE_DIR/core/deployment/doctor.sh"
 source "$BASE_DIR/core/deployment/resolve.sh"
 source "$BASE_DIR/core/deployment/planner.sh"
 source "$BASE_DIR/core/deployment/render.sh"
 source "$BASE_DIR/core/deployment/menu.sh"
 source "$BASE_DIR/core/deployment/confirm.sh"
+source "$BASE_DIR/core/deployment/transaction.sh"
+source "$BASE_DIR/core/deployment/install.sh"
 
 set_ui_context "Deployment"
 
 # =========================
+# CLI helpers
+# =========================
+# Every plan command is a different representation of the SAME Deployment
+# Plan: build once through the planner, then hand to a renderer. No
+# command has planning logic of its own.
+
+require_plan() {
+
+    local mode="$1" profile="$2"
+
+    if [[ -z "$profile" ]]; then
+        error_msg "❌ Uso: deployment.sh $mode <perfil>"
+        echo ""
+        echo "Perfiles disponibles:"
+        for id in $(list_profiles); do
+            printf "   • %-14s %s\n" "$id" "$(render_profile "$id")"
+        done
+        exit 1
+    fi
+
+    build_deployment_plan "$profile" || exit 1
+}
+
+# =========================
 # Dispatch
 # =========================
-# Interactive: catalog-generated menus → planner → confirmation.
-# CLI tools (--validate / --resolve / --tree) support catalog maintenance.
-# Nothing in this module modifies the system; installation arrives in
-# Phase 5 and will execute the plan built here.
 
 case "${1:-}" in
 
@@ -39,32 +62,45 @@ case "${1:-}" in
         fi
         ;;
 
-    --resolve|--tree)
-        MODE="$1"
-        PROFILE_ID="${2:-}"
-
+    --doctor)
         print_banner
-
-        if [[ -z "$PROFILE_ID" ]]; then
-            error_msg "❌ Uso: deployment.sh $MODE <perfil>"
-            echo ""
-            echo "Perfiles disponibles:"
-            for id in $(list_profiles); do
-                printf "   • %s\n" "$id"
-            done
+        if ! validate_catalog; then
+            print_completion "false"
             exit 1
         fi
+        run_catalog_doctor
+        print_completion "true"
+        ;;
 
-        if ! build_deployment_plan "$PROFILE_ID"; then
-            exit 1
-        fi
+    --resolve)
+        print_banner
+        require_plan "--resolve" "${2:-}"
+        render_plan_summary
+        print_completion "true"
+        ;;
 
-        if [[ "$MODE" == "--tree" ]]; then
-            render_plan_tree
-        else
-            render_plan
-        fi
+    --explain)
+        print_banner
+        require_plan "--explain" "${2:-}"
+        render_plan
+        print_completion "true"
+        ;;
 
+    --tree)
+        print_banner
+        require_plan "--tree" "${2:-}"
+        render_plan_tree
+        print_completion "true"
+        ;;
+
+    --plan)
+        print_banner
+        require_plan "--plan" "${2:-}"
+        PLAN_FILE="$(export_deployment_plan)"
+        print_section "🧾 Plan exportado"
+        cat "$PLAN_FILE"
+        echo ""
+        info "ℹ️ Archivo: logs/$(basename "$PLAN_FILE")"
         print_completion "true"
         ;;
 
@@ -84,6 +120,8 @@ case "${1:-}" in
 
     *)
         error_msg "❌ Opción no reconocida: $1"
+        echo ""
+        echo "Comandos: --validate | --doctor | --resolve <perfil> | --explain <perfil> | --tree <perfil> | --plan <perfil>"
         exit 1
         ;;
 

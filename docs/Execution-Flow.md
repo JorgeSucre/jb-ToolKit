@@ -107,7 +107,7 @@ flowchart TD
 
 The decline path is a first-class flow: preview → "no" → zero mutations → clean exit.
 
-## Module 4 — Deployment (`core/deployment.sh`) — planning only
+## Module 4 — Deployment (`core/deployment.sh`)
 
 ```mermaid
 flowchart TD
@@ -120,14 +120,24 @@ flowchart TD
     E --> H[Confirmation screen:<br/>bundles, counts, named skips]
     H -->|E| X[Explain view: provenance + reasons] --> H
     H -->|G| T[Tree view: catalog structure<br/>+ dedup/skip annotations] --> H
-    H -->|I| N[Honest notice:<br/>installation arrives next phase] --> H
     H -->|0| B
+    H -->|I| GATE{ask_yes_no:<br/>¿Preparar este equipo?}
+    GATE -->|no| CANC[Cancelled transaction recorded] --> H
+    GATE -->|yes| EXPORT[Export plan → logs/] --> PART[Partition: already installed<br/>vs pending, from plan pkg specs]
+    PART -->|nothing pending| DONE
+    PART --> ENG[Engine: temp Brewfile +<br/>retry 3 5 brew bundle]
+    ENG --> VERIFY[brew_cache_reset →<br/>per-app verification]
+    VERIFY --> DONE[Transaction + state.env +<br/>result screen: named outcomes]
+    DONE --> B
 ```
 
-**Zero system modification.** The module's only writes are the session log. The
-Deployment Plan (`PLAN_*` globals) built here is the exact contract the Phase 5
-installer will execute. CLI tools for catalog maintenance: `--validate`,
-`--resolve <perfil>` (explain), `--tree <perfil>`.
+The planner is the only decision-maker; the installer executes plan records
+verbatim (they carry package specs — it never reads the catalog). Results are
+**verified outcomes**: installed counts come from a fresh Homebrew query, failures
+and skips are named, and the Installation Transaction
+(`logs/deployment_txn_*.env`) records what actually happened. CLI: `--validate`,
+`--doctor`, `--resolve`, `--explain`, `--tree`, `--plan` — six representations of
+the same plan.
 
 ## Module 5 — Report (`core/report.sh`)
 

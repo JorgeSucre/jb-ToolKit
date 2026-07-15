@@ -52,6 +52,12 @@ flowchart LR
 | `LAST_SESSION_LOG` | `init_session` | report | Basename of current session log |
 | `LAST_SYSTEM_SNAPSHOT` | `init_session` | report, report_pdf.py | Basename of current snapshot |
 | `LAST_PDF_REPORT` | report | — | Basename of last generated PDF |
+| `DEPLOYED_PROFILE` | deployment | report | Profile ID of the last executed deployment |
+| `LAST_DEPLOYMENT` | deployment | report | Timestamp of the last deployment execution |
+| `DEPLOYMENT_APPS_INSTALLED` | deployment | report | **Confirmed** newly-installed count (post-verification) |
+| `DEPLOYMENT_APPS_FAILED` | deployment | report | Apps that did not verify after `brew bundle` |
+| `LAST_DEPLOYMENT_PLAN` | deployment | — | Basename of the exported plan (`logs/deployment_plan_*.env`) |
+| `LAST_DEPLOYMENT_TRANSACTION` | deployment | future history/support | Basename of the execution record (`logs/deployment_txn_*.env`) |
 
 ## Score baseline handoff
 

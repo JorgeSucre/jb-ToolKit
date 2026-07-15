@@ -3,9 +3,9 @@
 # =========================
 # Deployment confirmation
 # =========================
-# Final Phase 4 screen: the plan is complete and reviewable; installation
-# is intentionally disabled until the Phase 5 engine exists. The plan the
-# user confirms here is exactly the plan the installer will execute.
+# Final review of the Deployment Plan. [I] executes the exact plan shown
+# here through the installer (which decides nothing); a y/n gate inside
+# run_plan_installation is the last stop before the system changes.
 
 run_plan_confirmation() {
 
@@ -18,7 +18,7 @@ run_plan_confirmation() {
         render_confirmation
 
         echo ""
-        echo "[E] Explicar plan   [G] Ver árbol   [I] Instalar (no disponible)   [0] Volver"
+        echo "[E] Explicar plan   [G] Ver árbol   [I] Instalar   [0] Volver"
         printf "Selecciona una opción: "
         read -r choice
 
@@ -33,8 +33,12 @@ run_plan_confirmation() {
                 ;;
 
             [Ii])
-                warn "⚠️ La instalación aún no está disponible en esta versión"
-                info "ℹ️ El plan está completo; la ejecución llegará en la próxima fase"
+                # Executed (any outcome) → the review is over, results are
+                # on record. Cancelled at the y/n gate or blocked (no brew)
+                # → stay on the confirmation screen.
+                if run_plan_installation && [[ "$TXN_RESULT" != "cancelled" ]]; then
+                    return 0
+                fi
                 ;;
 
             0|[Bb])

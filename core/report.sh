@@ -205,6 +205,31 @@ if [[ "$PERFORMANCE_PROFILE_STATE" != "N/A" && "$PERFORMANCE_PROFILE_STATE" != "
     echo "• Perfil aplicado: $PERFORMANCE_PROFILE_STATE"
 fi
 
+DEPLOYED_PROFILE_STATE="$(state_value DEPLOYED_PROFILE)"
+
+if [[ "$DEPLOYED_PROFILE_STATE" != "N/A" ]]; then
+
+    echo ""
+    echo "Despliegue reciente:"
+    echo "• Perfil desplegado: $DEPLOYED_PROFILE_STATE"
+
+    LAST_DEPLOYMENT_STATE="$(state_value LAST_DEPLOYMENT)"
+    DEPLOYMENT_INSTALLED_STATE="$(state_value DEPLOYMENT_APPS_INSTALLED)"
+    DEPLOYMENT_FAILED_STATE="$(state_value DEPLOYMENT_APPS_FAILED)"
+
+    if [[ "$LAST_DEPLOYMENT_STATE" != "N/A" ]]; then
+        echo "• Última ejecución: $LAST_DEPLOYMENT_STATE"
+    fi
+
+    if [[ "$DEPLOYMENT_INSTALLED_STATE" != "N/A" ]]; then
+        echo "• Aplicaciones instaladas: $DEPLOYMENT_INSTALLED_STATE"
+    fi
+
+    if [[ "$DEPLOYMENT_FAILED_STATE" =~ ^[0-9]+$ && "$DEPLOYMENT_FAILED_STATE" -gt 0 ]]; then
+        echo "• Aplicaciones fallidas: $DEPLOYMENT_FAILED_STATE"
+    fi
+fi
+
 PDF_GENERATED="false"
 PDF_BASENAME=""
 

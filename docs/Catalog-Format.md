@@ -194,6 +194,22 @@ complete rule set:
 | V9 | Every `BUNDLES` entry resolves to an existing bundle file |
 | V10 | Bundle files begin with a display-name comment line |
 
+## Catalog Doctor (advisory diagnostics)
+
+`deployment.sh --doctor` runs the validator and then adds **maintainability
+suggestions** on a valid catalog. Advisories never fail validation:
+
+| # | Advisory |
+|---|---|
+| A1 | Application exists but no bundle references it |
+| A2 | Bundle contains a single application |
+| A3 | Application appears in multiple bundles (legitimate; dedup applies at resolution) |
+| A4 | Profile references a single bundle |
+| A5 | Category contains a single profile (renders as a direct menu entry) |
+
+Note: a JB Pick missing its note is **not** an advisory — it is validation failure
+V5. A recommendation without reasoning is invalid, not merely improvable.
+
 ## Adding catalog entries — technician quick reference
 
 **New application:** create `catalog/applications/<id>/`, write `app.conf` with the

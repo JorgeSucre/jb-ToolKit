@@ -1,8 +1,10 @@
 # Deployment — Design Document
 
-Status: **Phases 2–4 delivered.** The complete planning experience is live in the
-launcher (menus, planner, explain/tree views, confirmation). **No installation code
-exists** — Phase 5 will execute the Deployment Plan through the Bootstrap engine.
+Status: **All five phases delivered.** The Deployment module is complete: planning,
+review, and installation through the Bootstrap engine, with the Installation
+Transaction as the execution record. The final pipeline reference is
+[Deployment-Architecture.md](Deployment-Architecture.md); this document remains the
+design history.
 
 ## Thesis
 
@@ -77,12 +79,15 @@ responsibility):
 core/deployment.sh              # Small dispatcher: CLI tools + interactive entry
 core/deployment/
     catalog.sh                  # Catalog access, hierarchy queries, V1–V10 validator
+    doctor.sh                   # Advisory maintainability diagnostics (never blocking)
     resolve.sh                  # Bundles → app IDs with provenance → filtered set
-    planner.sh                  # Builds the Deployment Plan (PLAN_* contract)
-    render.sh                   # Pure presentation: render_* helpers, explain/tree/confirmation
+    planner.sh                  # Builds + exports the Deployment Plan (PLAN_* contract)
+    render.sh                   # Pure presentation: summary/explain/tree/confirmation/result
     menu.sh                     # Catalog-generated navigation, Custom flow, JB Picks browser
-    confirm.sh                  # Confirmation loop (install disabled until Phase 5)
-    install.sh                  # PHASE 5 (pending): execute the plan via the Bootstrap engine
+    confirm.sh                  # Confirmation loop; [I] executes the plan
+    transaction.sh              # Installation Transaction: the execution record
+    install.sh                  # Executes the plan via the Bootstrap engine; verifies per app
+    history.sh                  # FUTURE: browse deployment_txn_*.env records
 ```
 
 ### The Deployment Plan (Planner ↔ Installer contract)
@@ -345,7 +350,7 @@ begins before the previous one is reviewed.
 | **2 — Contracts + data** | [Catalog-Format.md](Catalog-Format.md) data contracts; `catalog/` scaffolded: application directories, bundles, profiles, vendor placeholder; resolution diagrams; doc updates. **Pure documentation and data — no code** | ✅ Delivered |
 | **3 — Loaders** | `core/deployment/catalog.sh` + `resolve.sh`: parse, validate (dangling IDs, duplicate IDs, BREW/CASK exclusivity, JB_PICK note rule), resolve profile → filtered app set; a `--validate` mode that walks the whole catalog. CLI-only entry `core/deployment.sh` (`--validate`, `--resolve <perfil>`), **not** wired into the launcher | ✅ Delivered |
 | **4 — Planning and UX** | The complete deployment experience minus installation: catalog-generated menus (categories, collapse rule, Custom, JB Picks browser) wired into the `jb` launcher; the **Deployment Planner** and plan contract; the render layer (`render_*`); explain and tree views; the confirmation screen with install disabled. Zero system modification | ✅ Delivered |
-| **5 — Installation engine** | `install.sh`: takes the Deployment Plan produced by Phase 4 and executes it — Brewfile compilation from `PLAN_APPS`, hand-off to the Bootstrap engine pattern, per-app verification, state keys, Report integration. No decisions, no duplicated install logic | Pending |
+| **5 — Installation engine** | `install.sh` + `transaction.sh`: executes the Deployment Plan — Brewfile compilation from plan records (which carry package specs; the installer never reads the catalog), hand-off to the Bootstrap engine pattern, per-app verification against a fresh Homebrew query, the Installation Transaction record, state keys, Report integration | ✅ Delivered |
 
 Risk containment: Phase 2 is inert data; Phase 3 touches nothing the user can reach;
 Phase 4 is reachable but cannot mutate a system; only Phase 5 installs, and it lands
