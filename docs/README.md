@@ -19,6 +19,8 @@ without reverse-engineering it from source.
 | [Hardware-Detection.md](Hardware-Detection.md) | Device profiling, Rosetta detection, hardware-driven recommendations |
 | [Reporting.md](Reporting.md) | Terminal report, system snapshot, and executive PDF pipeline |
 | [Future-Roadmap.md](Future-Roadmap.md) | What exists vs. what is planned; known future improvements |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Engineering handbook: philosophy, style, extension points, prohibitions |
+| [Deployment-Design.md](Deployment-Design.md) | **Design (not implemented):** Deployment module, catalog, bundles, JB Picks, phased plan |
 
 ## Ground rules for contributors
 
