@@ -1,7 +1,7 @@
 # JB Toolkit — Engineering Documentation
 
 This directory is the official engineering reference for JB Toolkit. It describes the
-architecture **as implemented today** (v2.0.1). It is written for future
+architecture **as implemented today** (v2.2.2). It is written for future
 contributors and AI assistants who need to understand, maintain, or extend the project
 without reverse-engineering it from source.
 
@@ -11,7 +11,7 @@ without reverse-engineering it from source.
 |---|---|
 | [Architecture.md](Architecture.md) | Overall structure, subsystems, module dependency graph |
 | [Design-Principles.md](Design-Principles.md) | The engineering philosophy, inferred from and evidenced by the code |
-| [Execution-Flow.md](Execution-Flow.md) | Launcher lifecycle and the four module workflows, step by step |
+| [Execution-Flow.md](Execution-Flow.md) | Launcher lifecycle and the five module workflows, step by step |
 | [Module-Overview.md](Module-Overview.md) | Per-file responsibilities and public functions |
 | [State-System.md](State-System.md) | The `state.env` persistence layer and cross-module data flow |
 | [Logging.md](Logging.md) | Session logs, command capture, error traps, artifact retention |
@@ -23,6 +23,14 @@ without reverse-engineering it from source.
 | [Deployment-Architecture.md](Deployment-Architecture.md) | The deployment pipeline: layers, the Plan and Transaction contracts, invariants, where future work belongs |
 | [Deployment-Design.md](Deployment-Design.md) | Design history of the Deployment module: decisions, phases, rationale |
 | [Catalog-Format.md](Catalog-Format.md) | **Normative data contracts** for `catalog/`: file formats, fields, validation rules, doctor advisories |
+| [Storage-Architecture.md](Storage-Architecture.md) | The Storage Platform service: Adopted Data Volumes, the generic scan/plan/execute/verify/rollback/commit pipeline, the public `storage::*` API, and the profile contract future migration profiles implement |
+| [architecture/](architecture/) | Architecture Decision Records — the *why* behind the Platform layer, one topic per file, written for readers who won't read the implementation |
+| [release-policy.md](release-policy.md) | Versioning strategy, the Release Candidate process, Architecture Freeze, and the release checklist |
+
+See also, at the repository root: [CHANGELOG.md](../CHANGELOG.md) (what
+changed, release by release) and [RELEASE_v2.2.2.md](../RELEASE_v2.2.2.md)
+(this release's own summary, written for someone discovering the project for
+the first time).
 
 ## Ground rules for contributors
 

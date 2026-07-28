@@ -43,14 +43,14 @@ Rosetta can be installed but idle): it checks the runtime binary on disk first
 
 | Decision | Input | Where |
 |---|---|---|
-| Deployment compatibility skips (`ARCHS`) | `uname -m` vs catalog data | `app_incompatibility_reason` (resolve.sh) |
-| Hardware recommendations | machine family + external display vs `HW_RECOMMEND` catalog data | `offer_hardware_extras` (deployment/menu.sh) |
+| Deployment compatibility skips (`ARCHS`) | `uname -m` vs catalog data | `app_incompatibility_reason` (deployment/selection.sh) |
+| Hardware recommendations | machine family + external display vs `HW_RECOMMEND` catalog data | `apply_hardware_recommendations` (deployment/selection.sh) — folded into the Application Catalog selection, not a separate screen |
 | App risk: Intel-only penalty (+35) | module arch check + per-app binary inspection | apps.sh |
 | Siri tweaks (aggressive profile) | Intel only | performance.sh |
 | Rosetta status line | Apple Silicon only | `print_hardware_summary` |
 | Laptop vs desktop profile summary | `BATTERY` | `print_optimization_summary` |
 
-### Hardware recommendations (`offer_hardware_extras` + `HW_RECOMMEND`)
+### Hardware recommendations (`apply_hardware_recommendations` + `HW_RECOMMEND`)
 
 The matching is **catalog data**: an application's `HW_RECOMMEND` field lists the
 machine families it is recommended for (`macbook_air`, `macbook_pro`, `mac_mini`,

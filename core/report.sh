@@ -8,7 +8,7 @@ if [[ "${JB_REPORT_ALREADY_RUN:-0}" == "1" ]]; then
 fi
 export JB_REPORT_ALREADY_RUN=1
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$BASE_DIR/core/utils.sh"
 # Session is owned by the jb launcher.
 # Only initialize a fallback session when run standalone (outside jb).
@@ -205,13 +205,13 @@ if [[ "$PERFORMANCE_PROFILE_STATE" != "N/A" && "$PERFORMANCE_PROFILE_STATE" != "
     echo "• Perfil aplicado: $PERFORMANCE_PROFILE_STATE"
 fi
 
-DEPLOYED_PROFILE_STATE="$(state_value DEPLOYED_PROFILE)"
+DEPLOYED_PRESET_STATE="$(state_value DEPLOYED_PRESET)"
 
-if [[ "$DEPLOYED_PROFILE_STATE" != "N/A" ]]; then
+if [[ "$DEPLOYED_PRESET_STATE" != "N/A" ]]; then
 
     echo ""
     echo "Despliegue reciente:"
-    echo "• Perfil desplegado: $DEPLOYED_PROFILE_STATE"
+    echo "• Plantilla desplegada: $DEPLOYED_PRESET_STATE"
 
     LAST_DEPLOYMENT_STATE="$(state_value LAST_DEPLOYMENT)"
     DEPLOYMENT_INSTALLED_STATE="$(state_value DEPLOYMENT_APPS_INSTALLED)"

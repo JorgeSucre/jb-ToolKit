@@ -7,7 +7,7 @@ STAGE_START_TIME=0
 CURRENT_STAGE=1
 TOTAL_STAGES=5
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$BASE_DIR/core/utils.sh"
 # Session is owned by the jb launcher.
 # Only initialize a fallback session when run standalone (outside jb).
@@ -23,7 +23,7 @@ source "$BASE_DIR/core/bootstrap/hardware.sh"
 # catalog, planner, and installer as the Deployment module. Bootstrap
 # owns no software selection of its own.
 source "$BASE_DIR/core/deployment/catalog.sh"
-source "$BASE_DIR/core/deployment/resolve.sh"
+source "$BASE_DIR/core/deployment/selection.sh"
 source "$BASE_DIR/core/deployment/planner.sh"
 source "$BASE_DIR/core/deployment/render.sh"
 source "$BASE_DIR/core/deployment/menu.sh"
@@ -33,9 +33,6 @@ source "$BASE_DIR/core/deployment/install.sh"
 source "$BASE_DIR/core/bootstrap/wizard.sh"
 
 set_ui_context "Bootstrap"
-
-STATE_FILE="$BASE_DIR/logs/state.env"
-mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
 
 print_banner
 
@@ -122,7 +119,7 @@ print_section "🧠 Resultado final"
 success "• Entorno base configurado correctamente"
 
 if [[ -n "$TXN_RESULT" && "$TXN_RESULT" != "cancelled" ]]; then
-    success "• Software desplegado con el perfil ${PLAN_PROFILE_NAME:-N/A}"
+    success "• Software desplegado con la plantilla ${PLAN_PRESET_NAME:-N/A}"
 else
     info "• Despliegue de software omitido"
 fi

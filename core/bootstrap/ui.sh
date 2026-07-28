@@ -1,5 +1,3 @@
-
-
 #!/bin/bash
 
 # =========================
@@ -83,16 +81,6 @@ print_completion() {
     else
         warn "⚠️ ${UI_CONTEXT} finalizado con advertencias"
     fi
-
-    echo "========================================"
-}
-
-print_cancelled() {
-
-    echo ""
-    echo "========================================"
-
-    info "ℹ️ ${UI_CONTEXT} omitido por el usuario"
 
     echo "========================================"
 }

@@ -24,7 +24,7 @@ code, a re-count, or a before/after measurement.
 
 ## 2. Modules are independent processes; state crosses through one file
 
-The four modules never call each other. Anything that must outlive a module run is
+The five modules never call each other. Anything that must outlive a module run is
 written to `logs/state.env` via `write_state_values` and read via `state_value`.
 Missing keys read as `"N/A"`, and every consumer handles that value explicitly.
 
@@ -43,9 +43,12 @@ consolidation makes the code **smaller** (see principle 7).
 Behavior branches on detected hardware, not on user configuration:
 
 - Package recommendations by machine family (`HW_RECOMMEND` in the catalog +
-  `offer_hardware_extras`: AlDente for MacBooks, Macs Fan Control for desktops,
-  BetterDisplay when an external display is present) — the matching machines are
-  catalog data, not code.
+  `apply_hardware_recommendations`: AlDente for MacBooks, Macs Fan Control for
+  desktops, BetterDisplay when an external display is present) — the matching
+  machines are catalog data, not code. A recommendation is still filtered
+  through the same `app_incompatibility_reason` check preset loading uses
+  before joining the selection — hardware-driven pre-selection never bypasses
+  the compatibility contract every other entry path enforces.
 - App risk scoring weights Intel-only binaries only on Apple Silicon.
 - Rosetta detection runs only on Apple Silicon; Siri tweaks only on Intel.
 - `get_device_profile` normalizes: laptops always report a battery.
@@ -91,6 +94,22 @@ code:
 **Rule:** consolidate only when the result is smaller, more readable, and introduces
 no new abstraction. A three-line fix beats a thirty-line framework.
 
+**Deliberate exception:** the Storage Platform's profile registry
+(`core/platform/storage/engine.sh` + `profiles/*/`) is a real abstraction
+introduced ahead of a demonstrated third consumer, which principle 3 and this
+one both normally forbid. It was a direct, explicit request — first to evolve
+a one-shot Home migration script into infrastructure future migration
+profiles build on, then to establish Storage as the first tenant of a
+`core/platform/` layer future shared services (State, Metrics, Logging,
+Report, Events, Config — none implemented, all just named) would eventually
+join — and the benefit was measured before committing to it:
+`profiles/downloads/` is two small files (`profile.env` + `scan.sh`) that get
+the entire pipeline (adoption awareness, sizing, selection, plan export,
+verified copy, rollback, gated deletion) for free, with zero changes to the
+engine. Don't extend the `core/platform/` pattern to other subsystems without
+the same bar: a second real consumer, proven small, or an equally explicit
+request — see [architecture/0001-platform-philosophy.md](architecture/0001-platform-philosophy.md).
+
 ## 8. Destructive actions are user-driven and scoped to user space
 
 - Nothing under `/System`, `/Library` (system domain), or other users' homes is ever
@@ -103,6 +122,20 @@ no new abstraction. A three-line fix beats a thirty-line framework.
   Parallels/Docker).
 - Maintenance asks for confirmation (`ask_yes_no`) before touching anything, and a
   "no" exits cleanly with `MAINTENANCE_SKIPPED`.
+- The Storage Platform (`core/platform/storage/*`, see
+  [Storage-Architecture.md](Storage-Architecture.md)) never removes a source
+  folder on a bare copy — only after `storage_verify_item` reports zero
+  differences via a checksum dry-run **and** a second explicit confirmation, and
+  even then it re-measures the source size immediately before deletion and
+  re-counts what remains afterward rather than trusting a stale scan value or
+  assuming `rm` succeeded. A copy failure rolls back the partial destination
+  automatically; a verify failure does not, because the cause is ambiguous and
+  a human should look before anything is removed on either side.
+- The same "no module estimates a storage figure it hasn't re-measured" rule
+  applies to `core/maintenance/cleanup.sh`'s cache/log/trash cleanup: the MB
+  freed is now the pre-scan estimate minus whatever still matches the deletion
+  predicate afterward (mirroring the file-count remeasurement that was already
+  there), not the pre-scan estimate reported as if verified.
 
 ## 9. Every action is auditable
 

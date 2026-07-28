@@ -55,7 +55,7 @@ flowchart TD
     H --> I[Stage 3: detect_rosetta + print_hardware_summary]
     I --> J[Stage 4: run_onboarding_wizard<br/>validate catalog → ¿Cómo se usará este Mac?]
     J -->|Omitir| K
-    J -->|profile / custom| DEP[Deployment flow:<br/>bundle review → hardware extras →<br/>planner → confirmation → installer]
+    J -->|preset / empezar vacío| DEP[start_deployment_flow — the SAME function<br/>the Deployment menu calls:<br/>Application Catalog → planner → confirmation → installer]
     DEP --> K[Stage 5: optimization summary,<br/>final result, print_completion]
 ```
 
@@ -104,19 +104,22 @@ The decline path is a first-class flow: preview → "no" → zero mutations → 
 
 ## Module 4 — Deployment (`core/deployment.sh`)
 
+One workflow, one selection model — see
+[Deployment-Architecture.md](Deployment-Architecture.md) and
+[architecture/0006-deployment-flattening.md](architecture/0006-deployment-flattening.md)
+for why this replaced the earlier Profiles→Bundles→Applications hierarchy.
+
 ```mermaid
 flowchart TD
-    A[Validate catalog V1–V10<br/>invalid = abort, name the files] --> B[Main menu: categories from data<br/>+ Personalizado + JB Picks, ≤7 entries]
-    B -->|category| C{Collapse rule}
-    C -->|single profile, no SUBCATEGORY| REV
-    C -->|multiple profiles| D[Submenu by SUBCATEGORY/ORDER] --> REV
-    B -->|Personalizado| F[Bundle multi-select<br/>parse_selection] --> REV
-    B -->|JB Picks| P[Read-only browser:<br/>★★★★★ + mandatory notes] --> B
-    REV[Bundle review, per bundle:<br/>1 instalar todo · 2 personalizar<br/>per-app toggles · 3 omitir] --> HW[Hardware recommendations:<br/>HW_RECOMMEND ∩ this machine,<br/>not yet installed]
-    HW --> E[Planner: bundles kept + exclusions + extras →<br/>automatic track, manual track, named skips]
-    E --> H[Confirmation screen: bundles,<br/>automatic/manual/pick/skip counts]
+    A[Validate catalog V1–V9<br/>invalid = abort, name the files] --> B[Quick Presets: flat list from data<br/>+ Empezar vacío, 0 nesting]
+    B -->|preset or empty| LOAD[load_preset_into_selection<br/>or reset_selection<br/>incompatible apps recorded, never silent]
+    LOAD --> HWFOLD[apply_hardware_recommendations:<br/>HW_RECOMMEND ∩ this machine,<br/>not yet installed, folded into the SAME selection]
+    HWFOLD --> CAT[Application Catalog:<br/>one continuous list grouped by CATEGORY,<br/>toggle add/remove, JB_PICK apps marked ⭐ inline,<br/>incompatible apps shown ⛔ not selectable]
+    CAT -->|0| CANC0[Selection cancelled] --> B
+    CAT -->|Enter| E[Planner: build_plan_from_selection —<br/>classifies SELECTED_APPS into<br/>automatic track, manual track, named JB Picks]
+    E --> H[Confirmation screen: preset,<br/>automatic/manual/pick/compat-exclusion counts]
     H -->|E| X[Explain view: provenance,<br/>manual steps + URLs, reasons] --> H
-    H -->|G| T[Tree view: catalog structure<br/>+ dedup/manual/skip annotations] --> H
+    H -->|G| T[Diff view: preset vs. final selection<br/>kept / added / removed] --> H
     H -->|0| B
     H -->|I| GATE{ask_yes_no:<br/>¿Preparar este equipo?}
     GATE -->|no| CANC[Cancelled transaction recorded] --> H
@@ -131,15 +134,16 @@ flowchart TD
     DONE --> URLS[Offer download page<br/>per manual app] --> B
 ```
 
-The planner is the only decision-maker; the installer executes plan records
-verbatim (they carry method + package specs — it never reads the catalog). Each
-application installs independently: one failure or unavailable package never
-aborts the rest. Results are **verified outcomes**: installed counts come from a
-fresh Homebrew query, manual steps are named and never counted as failures,
-failures carry their reasons, and the Installation Transaction
-(`logs/deployment_txn_*.env`) records what actually happened. CLI: `--validate`,
-`--doctor`, `--resolve`, `--explain`, `--tree`, `--plan` — six representations of
-the same plan (CLI plans take every bundle; the review is interactive-only).
+The planner is the only decision-maker past selection; the installer executes
+plan records verbatim (they carry method + package specs — it never reads the
+catalog). Each application installs independently: one failure or unavailable
+package never aborts the rest. Results are **verified outcomes**: installed
+counts come from a fresh Homebrew query, manual steps are named and never
+counted as failures, failures carry their reasons, and the Installation
+Transaction (`logs/deployment_txn_*.env`) records what actually happened. CLI:
+`--validate`, `--doctor`, `--resolve`, `--explain`, `--tree`, `--plan` — six
+representations of the same plan (CLI plans load a preset with zero manual
+edits; the Application Catalog is interactive-only).
 
 ## Module 5 — Report (`core/report.sh`)
 

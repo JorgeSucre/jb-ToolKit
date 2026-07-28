@@ -1,17 +1,33 @@
 # Deployment — Design Document
 
-Status: **All five phases delivered; evolved in v2.0.1.** The Deployment module is
-complete: planning, review, and installation, with the Installation Transaction as
-the execution record. This document is the **design history** — it describes the
-phases as they were designed and shipped. v2.0.1 later evolved three details
-recorded here: the catalog's `BREW`/`CASK` fields became the generic
-`INSTALL_METHOD`/`PACKAGE`/`DOWNLOAD_URL` model (with a manual track for apps
-Homebrew can't provide), the engine changed from one `brew bundle` over a temp
-Brewfile to **per-application** `brew install` (one failure never aborts the
-rest), and Bootstrap's software step became a wizard over this same pipeline.
-The current pipeline reference is
-[Deployment-Architecture.md](Deployment-Architecture.md); the current data
-contract is [Catalog-Format.md](Catalog-Format.md).
+Status: **All five phases delivered; evolved in v2.0.1; the Profiles→Bundles
+hierarchy this document describes was removed in v2.2.** This document is the
+**design history** — it describes the phases as they were designed and
+shipped at the time. Two evolutions since:
+
+- **v2.0.1**: the catalog's `BREW`/`CASK` fields became the generic
+  `INSTALL_METHOD`/`PACKAGE`/`DOWNLOAD_URL` model (with a manual track for apps
+  Homebrew can't provide), the engine changed from one `brew bundle` over a temp
+  Brewfile to **per-application** `brew install` (one failure never aborts the
+  rest), and Bootstrap's software step became a wizard over this same pipeline.
+- **v2.2**: the `Profiles → Bundles → Applications` hierarchy described
+  throughout this document — bundle files, profile files, the two-level
+  `CATEGORY`/`SUBCATEGORY` menu, the per-bundle review screen, the separate
+  hardware-recommendation offer — **no longer exists in the code.** It was
+  replaced by a flat `Catalog → Applications → Selected Applications →
+  Installation Plan → Execution` model: one preset file per named selection
+  (`catalog/presets/*.preset`, just an app-ID list), applications carry their
+  own `CATEGORIES` for browsing, and one selection set
+  (`core/deployment/selection.sh`) is the sole representation regardless of
+  how an application was chosen. **Read this document as history, not as the
+  current design** — the sections below (catalog layout, the referential
+  diagram, the menu-generation contract, the resolution pipeline, the state
+  key table) describe the pre-v2.2 architecture accurately *for its time* and
+  are preserved for that reason, not corrected in place. For the current
+  architecture: [Deployment-Architecture.md](Deployment-Architecture.md)
+  (pipeline), [Catalog-Format.md](Catalog-Format.md) (data contract), and
+  [architecture/0006-deployment-flattening.md](architecture/0006-deployment-flattening.md)
+  (why it changed and what was considered and rejected).
 
 ## Thesis
 

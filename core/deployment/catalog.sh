@@ -10,8 +10,20 @@
 # under `set -e` stay safe; existence is checked explicitly via *_exists.
 # Validation is strict: validate_catalog reports every violation by rule
 # number and file, and returns non-zero if the catalog is unusable.
+#
+# Two layers only — applications and presets. See
+# docs/architecture/0006-deployment-flattening.md for why there is no
+# intermediate bundle/profile grouping, and
+# docs/architecture/0007-catalog-consistency.md for why applications own
+# exactly one category and presets live in a single file.
 
 CATALOG_DIR="${JB_CATALOG_DIR:-$BASE_DIR/catalog}"
+PRESETS_FILE="$CATALOG_DIR/presets.conf"
+
+# The only values CATEGORY may take. Adding one is a deliberate taxonomy
+# decision (see the ADR) — not something a new app.conf should introduce on
+# its own, which is why the validator (V6) rejects anything outside this set.
+CATALOG_CATEGORIES="browsers communication creative development hardware networking productivity utilities"
 
 CATALOG_ERRORS=0
 
@@ -19,13 +31,8 @@ CATALOG_ERRORS=0
 # Paths and existence
 # =========================
 
-app_conf_path() { printf "%s\n" "$CATALOG_DIR/applications/$1/app.conf"; }
-bundle_path()   { printf "%s\n" "$CATALOG_DIR/bundles/$1.bundle"; }
-profile_path()  { printf "%s\n" "$CATALOG_DIR/profiles/$1.profile"; }
-
+app_conf_path()  { printf "%s\n" "$CATALOG_DIR/applications/$1/app.conf"; }
 app_exists()     { [[ -f "$CATALOG_DIR/applications/$1/app.conf" ]]; }
-bundle_exists()  { [[ -f "$CATALOG_DIR/bundles/$1.bundle" ]]; }
-profile_exists() { [[ -f "$CATALOG_DIR/profiles/$1.profile" ]]; }
 
 # =========================
 # Field access
@@ -42,8 +49,7 @@ catalog_field() {
         "$file"
 }
 
-app_field()     { catalog_field "$(app_conf_path "$1")" "$2"; }
-profile_field() { catalog_field "$(profile_path "$1")" "$2"; }
+app_field()    { catalog_field "$(app_conf_path "$1")" "$2"; }
 
 # =========================
 # Listing
@@ -58,115 +64,121 @@ list_applications() {
     done
 }
 
-list_bundles() {
-    local file
+# =========================
+# Preset access — catalog/presets.conf, one file, one [id] section per
+# preset. Sections stay flat KEY=value, same awk-parseable convention as
+# every other catalog file — no YAML/JSON parser, no new dependency. See
+# docs/architecture/0007-catalog-consistency.md.
+# =========================
 
-    for file in "$CATALOG_DIR/bundles"/*.bundle; do
-        [[ -f "$file" ]] || continue
-        basename "$file" .bundle
-    done
+# Lines belonging to preset ID's [id] section, in file order
+_preset_block() {
+    local id="$1"
+
+    [[ -f "$PRESETS_FILE" ]] || return 0
+
+    awk -v section="[$id]" '
+        $0 == section { found=1; next }
+        /^\[/ { found=0 }
+        found { print }
+    ' "$PRESETS_FILE"
 }
 
-list_profiles() {
-    local file
-
-    for file in "$CATALOG_DIR/profiles"/*.profile; do
-        [[ -f "$file" ]] || continue
-        basename "$file" .profile
-    done
+preset_exists() {
+    [[ -f "$PRESETS_FILE" ]] && grep -qx "\[$1\]" "$PRESETS_FILE"
 }
 
-# =========================
-# Bundle access
-# =========================
+preset_field() {
+    local id="$1" key="$2"
 
-# First comment line is the display name (contract V10)
-bundle_display_name() {
-    local file
-    file="$(bundle_path "$1")"
-
-    [[ -f "$file" ]] || return 0
-
-    sed -n '1s/^# *//p' "$file"
+    _preset_block "$id" | awk -F= -v key="$key" \
+        '$1 == key {print substr($0, length(key) + 2); exit}'
 }
 
-# Application IDs, one per line, comments and blanks stripped
-bundle_apps() {
-    local file
-    file="$(bundle_path "$1")"
-
-    [[ -f "$file" ]] || return 0
-
-    grep -Ev '^#|^[[:space:]]*$' "$file" || true
+# _preset_flag_line ID KEY — raw value iff KEY's line is present within ID's
+# own section. Scoped to the block (not the whole file) so it can never pick
+# up a same-named key from a different preset lower in presets.conf. Always
+# exits 0 — an absent key is a normal outcome for this accessor, not a
+# failure, same tolerant contract as catalog_field/preset_field.
+_preset_flag_line() {
+    local id="$1" key="$2" line
+    line="$(_preset_block "$id" | grep -m1 "^$key=" || true)"
+    [[ -n "$line" ]] && printf "%s\n" "${line#"$key"=}"
+    return 0
 }
 
-# =========================
-# Profile access
-# =========================
-
-# Bundle IDs referenced by a profile, one per line, order preserved
-profile_bundles() {
-    local bundles
-    bundles="$(profile_field "$1" BUNDLES)"
-
-    [[ -n "$bundles" ]] || return 0
-
-    tr ' ' '\n' <<< "$bundles" | sed '/^$/d'
+# Preset IDs, one per line, in file order. Only well-formed (kebab-case)
+# section headers — a malformed one (typo, stray capital, a space) must
+# still be caught by the validator, not silently absent from every listing
+# as if it never existed. validate_catalog iterates
+# _preset_section_headers_raw() instead, specifically to catch that case.
+list_presets() {
+    [[ -f "$PRESETS_FILE" ]] || return 0
+    grep -o '^\[[a-z0-9][a-z0-9-]*\]$' "$PRESETS_FILE" | sed 's/^\[//; s/\]$//'
 }
 
-# =========================
-# Hierarchy queries (menu-generation contract, docs/Catalog-Format.md)
-# =========================
+# Every [section] header exactly as written, malformed ones included —
+# validation-only. Functional code (menus, doctor) must keep using
+# list_presets(); this exists so an invalid header is reported (V1) instead
+# of just never appearing anywhere.
+_preset_section_headers_raw() {
+    [[ -f "$PRESETS_FILE" ]] || return 0
+    grep -o '^\[[^]]*\]$' "$PRESETS_FILE" | sed 's/^\[//; s/\]$//'
+}
 
-_profile_order() {
+_preset_order() {
     local order
-    order="$(profile_field "$1" ORDER)"
+    order="$(preset_field "$1" ORDER)"
     [[ "$order" =~ ^[0-9]+$ ]] || order=50
     printf "%03d\n" "$order"
 }
 
-# Distinct CATEGORY values ordered by the minimum ORDER among their profiles
-list_categories() {
-    local id
+# Application IDs a preset predefines, one per line, order preserved.
+# This is the ENTIRE preset — no nested references, no groups.
+preset_apps() {
+    local apps
+    apps="$(preset_field "$1" APPS)"
 
-    for id in $(list_profiles); do
-        printf "%s|%s\n" "$(_profile_order "$id")" "$(profile_field "$id" CATEGORY)"
-    done | sort -t'|' -k1,1n -k2,2 | awk -F'|' '!seen[$2]++ {print $2}'
+    [[ -n "$apps" ]] || return 0
+
+    tr ' ' '\n' <<< "$apps" | sed '/^$/d'
 }
 
-# Profile IDs within a category, ordered by ORDER (ties alphabetical)
-profiles_in_category() {
-    local category="$1" id
+# Preset IDs ordered by ORDER (ties alphabetical) — the flat Quick Presets list
+list_presets_ordered() {
+    local id
 
-    for id in $(list_profiles); do
-        [[ "$(profile_field "$id" CATEGORY)" == "$category" ]] || continue
-        printf "%s|%s\n" "$(_profile_order "$id")" "$id"
+    for id in $(list_presets); do
+        printf "%s|%s\n" "$(_preset_order "$id")" "$id"
     done | sort -t'|' -k1,1n -k2,2 | cut -d'|' -f2
 }
 
-# Collapse rule: prints the profile ID when the category resolves directly
-# (exactly one profile, no SUBCATEGORY); prints nothing otherwise
-category_direct_profile() {
-    local ids count
+# =========================
+# Application category queries (Application Catalog browser)
+# =========================
+# CATEGORY is presentational only and single-valued: every application
+# belongs to exactly one category, so it appears in exactly one section with
+# exactly one selection number — never duplicated, never split across
+# sections. See docs/architecture/0007-catalog-consistency.md.
 
-    ids="$(profiles_in_category "$1")"
-    count=$(printf "%s\n" "$ids" | sed '/^$/d' | wc -l | tr -d ' ')
-
-    [[ "$count" -eq 1 ]] || return 0
-    [[ -z "$(profile_field "$ids" SUBCATEGORY)" ]] || return 0
-
-    printf "%s\n" "$ids"
-}
-
-# Application IDs marked JB_PICK=true
-list_jb_picks() {
+# Distinct CATEGORY values across all applications, alphabetical
+list_app_categories() {
     local id
 
     for id in $(list_applications); do
-        [[ "$(app_field "$id" JB_PICK)" == "true" ]] && printf "%s\n" "$id"
-    done
+        app_field "$id" CATEGORY
+    done | sort -u
+}
 
-    return 0
+# Application IDs whose CATEGORY is CATEGORY, ordered by NAME
+apps_in_category() {
+    local category="$1" id name
+
+    for id in $(list_applications); do
+        [[ "$(app_field "$id" CATEGORY)" == "$category" ]] || continue
+        name="$(app_field "$id" NAME)"
+        printf "%s|%s\n" "$name" "$id"
+    done | sort -t'|' -k1,1 | cut -d'|' -f2
 }
 
 # Application IDs whose HW_RECOMMEND matches this machine.
@@ -194,7 +206,7 @@ apps_recommended_for_hardware() {
 }
 
 # =========================
-# Validation (rules V1–V10, docs/Catalog-Format.md)
+# Validation (rules V1–V9, docs/Catalog-Format.md)
 # =========================
 
 catalog_error() {
@@ -202,16 +214,30 @@ catalog_error() {
     error_msg "❌ $1"
 }
 
+# _duplicate_keys BLOCK_TEXT — KEY names appearing on more than one line.
+# catalog_field/preset_field take the FIRST match and never mention the
+# rest, so a duplicate key is otherwise a silent, invisible inconsistency —
+# the second value is just discarded with no error and no trace (V9).
+_duplicate_keys() {
+    awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/ {print $1}' <<< "$1" | sort | uniq -d
+}
+
 _valid_id() {
     [[ "$1" =~ ^[a-z0-9][a-z0-9-]*$ ]]
 }
 
 # _flag_line FILE KEY — prints the raw value iff the key line is present
-# (distinguishes "absent" from "present with wrong value" for V4/V6)
+# (distinguishes "absent" from "present with wrong value" for V4/V6). Always
+# exits 0 — an absent key is a normal outcome for this accessor, not a
+# failure, same tolerant contract as catalog_field/preset_field. Every real
+# validate_catalog call site wraps it in `if`, which already shields errexit
+# from an inner command substitution's exit code — but the accessor should
+# not rely on that at every call site to stay set -e-safe.
 _flag_line() {
     local line
     line="$(grep -m1 "^$2=" "$1" || true)"
     [[ -n "$line" ]] && printf "%s\n" "${line#"$2"=}"
+    return 0
 }
 
 validate_application() {
@@ -255,12 +281,10 @@ validate_application() {
             && catalog_error "V3: $ref — la clave $field ya no existe; usa INSTALL_METHOD y PACKAGE"
     done
 
-    for field in JB_PICK RECOMMENDED; do
-        value="$(_flag_line "$conf" "$field")"
-        if [[ -n "$value" && "$value" != "true" ]]; then
-            catalog_error "V4: $ref — $field debe ser 'true' o estar ausente"
-        fi
-    done
+    value="$(_flag_line "$conf" JB_PICK)"
+    if [[ -n "$value" && "$value" != "true" ]]; then
+        catalog_error "V4: $ref — JB_PICK debe ser 'true' o estar ausente"
+    fi
 
     if [[ "$(app_field "$id" JB_PICK)" == "true" ]]; then
         [[ -n "$(app_field "$id" JB_PICK_NOTE)" ]] \
@@ -285,19 +309,37 @@ validate_application() {
             *) catalog_error "V6: $ref — familia desconocida en HW_RECOMMEND: '$tag'" ;;
         esac
     done
+
+    value="$(app_field "$id" CATEGORY)"
+    if [[ -z "$value" ]]; then
+        catalog_error "V2: $ref — falta el campo requerido CATEGORY"
+    elif ! grep -qw "$value" <<< "$CATALOG_CATEGORIES"; then
+        catalog_error "V6: $ref — categoría desconocida en CATEGORY: '$value'"
+    fi
+
+    while IFS= read -r field; do
+        [[ -z "$field" ]] && continue
+        catalog_error "V9: $ref — clave duplicada: '$field' (solo se usa la primera aparición, el resto se descarta en silencio)"
+    done < <(_duplicate_keys "$(cat "$conf" 2>/dev/null)")
 }
 
-validate_bundle() {
+validate_preset() {
     local id="$1"
-    local file ref="bundles/$id.bundle"
-    local app seen=""
-    file="$(bundle_path "$id")"
+    local ref="presets.conf#[$id]"
+    local field value app seen=""
 
     _valid_id "$id" \
-        || catalog_error "V1: $ref — ID de bundle inválido (kebab-case requerido)"
+        || catalog_error "V1: $ref — ID de preset inválido (kebab-case requerido)"
 
-    head -1 "$file" | grep -q '^# .' \
-        || catalog_error "V10: $ref — la primera línea debe ser el nombre visible ('# Nombre')"
+    for field in NAME DESCRIPTION APPS; do
+        [[ -n "$(preset_field "$id" "$field")" ]] \
+            || catalog_error "V2: $ref — falta el campo requerido $field"
+    done
+
+    value="$(_preset_flag_line "$id" ORDER)"
+    if [[ -n "$value" && ! "$value" =~ ^[0-9]+$ ]]; then
+        catalog_error "V6: $ref — ORDER debe ser un entero"
+    fi
 
     while IFS= read -r app; do
         [[ -z "$app" ]] && continue
@@ -306,37 +348,30 @@ validate_bundle() {
             || catalog_error "V7: $ref — referencia una aplicación inexistente: '$app'"
 
         if grep -qx "$app" <<< "$seen"; then
-            catalog_error "V8: $ref — aplicación duplicada dentro del bundle: '$app'"
+            catalog_error "V8: $ref — aplicación duplicada dentro del preset: '$app'"
         fi
         seen+="$app"$'\n'
 
-    done < <(bundle_apps "$id")
+    done < <(preset_apps "$id")
+
+    while IFS= read -r field; do
+        [[ -z "$field" ]] && continue
+        catalog_error "V9: $ref — clave duplicada: '$field' (solo se usa la primera aparición, el resto se descarta en silencio)"
+    done < <(_duplicate_keys "$(_preset_block "$id")")
 }
 
-validate_profile() {
-    local id="$1"
-    local file ref="profiles/$id.profile"
-    local field value bundle
-    file="$(profile_path "$id")"
+# V8 (global): no duplicate [id] section within presets.conf. One file, one
+# grep-able source of truth per preset id — the filesystem no longer
+# enforces this by construction the way one-file-per-preset did.
+validate_preset_uniqueness() {
+    local dup
 
-    _valid_id "$id" \
-        || catalog_error "V1: $ref — ID de perfil inválido (kebab-case requerido)"
+    [[ -f "$PRESETS_FILE" ]] || return 0
 
-    for field in NAME DESCRIPTION CATEGORY BUNDLES; do
-        [[ -n "$(profile_field "$id" "$field")" ]] \
-            || catalog_error "V2: $ref — falta el campo requerido $field"
-    done
-
-    value="$(_flag_line "$file" ORDER)"
-    if [[ -n "$value" && ! "$value" =~ ^[0-9]+$ ]]; then
-        catalog_error "V6: $ref — ORDER debe ser un entero"
-    fi
-
-    while IFS= read -r bundle; do
-        [[ -z "$bundle" ]] && continue
-        bundle_exists "$bundle" \
-            || catalog_error "V9: $ref — referencia un bundle inexistente: '$bundle'"
-    done < <(profile_bundles "$id")
+    while IFS= read -r dup; do
+        [[ -z "$dup" ]] && continue
+        catalog_error "V8: presets.conf — sección de preset duplicada: '[$dup]'"
+    done < <(_preset_section_headers_raw | sort | uniq -d)
 }
 
 # V8 (global): a package identifier may exist in exactly one app.conf
@@ -356,7 +391,7 @@ validate_package_uniqueness() {
 }
 
 validate_catalog() {
-    local id app_count=0 bundle_count=0 profile_count=0
+    local id app_count=0 preset_count=0
 
     CATALOG_ERRORS=0
 
@@ -372,16 +407,18 @@ validate_catalog() {
         app_count=$((app_count + 1))
     done
 
-    for id in $(list_bundles); do
-        validate_bundle "$id"
-        bundle_count=$((bundle_count + 1))
-    done
+    # Every raw [section] header, not list_presets() — a malformed header
+    # (invalid kebab-case, possibly containing spaces) must be validated and
+    # reported (V1), not silently excluded from the count as if it didn't
+    # exist. while-read, not for-in: a malformed header can contain spaces,
+    # which word-splitting would fracture into several fake IDs.
+    while IFS= read -r id; do
+        [[ -z "$id" ]] && continue
+        validate_preset "$id"
+        preset_count=$((preset_count + 1))
+    done < <(_preset_section_headers_raw)
 
-    for id in $(list_profiles); do
-        validate_profile "$id"
-        profile_count=$((profile_count + 1))
-    done
-
+    validate_preset_uniqueness
     validate_package_uniqueness
 
     echo ""
@@ -391,5 +428,5 @@ validate_catalog() {
         return 1
     fi
 
-    success "✔ Catálogo válido: $app_count aplicaciones, $bundle_count bundles, $profile_count perfiles"
+    success "✔ Catálogo válido: $app_count aplicaciones, $preset_count presets"
 }

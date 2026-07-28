@@ -184,21 +184,27 @@ Todas las acciones quedan registradas para futuras referencias.
 
 ## 4. Deployment
 
-Prepara equipos completos mediante perfiles de trabajo:
+Prepara equipos completos mediante un flujo único:
 
-- Perfiles por tipo de equipo: Home, Office, Professional, Technician, Developer
-- Bundles reutilizables de aplicaciones seleccionadas por JB Repair
-- Personalización por bundle: instalar todo, elegir aplicaciones una a una,
-  u omitir el bundle completo
-- JB Picks: recomendaciones curadas con su justificación
-- Perfil personalizado combinando bundles
+Catálogo → Aplicaciones → Aplicaciones seleccionadas → Plan de instalación → Ejecución
+
+- Presets rápidos (Home, Office, Business, Engineering, Creative, Education,
+  Technician, Developer): cada uno precarga una selección de aplicaciones que
+  el técnico puede revisar, agregar o quitar libremente antes de instalar —
+  no son un modo de ejecución aparte, solo un punto de partida
+- Catálogo de aplicaciones agrupado por categoría (una aplicación, una
+  categoría) con selección numerada continua
+- JB Picks: recomendaciones curadas por JB Repair con su justificación,
+  navegables desde el mismo catálogo
+- Recomendaciones automáticas según el hardware detectado, incorporadas a la
+  misma selección — nunca un flujo separado
 - Revisión completa del plan y verificación previa (pre-flight) antes de
   cualquier cambio en el sistema
 - Instalación aplicación por aplicación: un fallo nunca detiene el resto
 - Aplicaciones sin soporte en Homebrew se reportan honestamente como
   "instalación manual requerida", con su página de descarga — nunca como fallos
-- Resultado con desglose veraz: instaladas, ya instaladas, omitidas, manuales
-  y fallidas (con su motivo)
+- Resultado con desglose veraz: instaladas, ya instaladas, excluidas por
+  compatibilidad, manuales y fallidas (con su motivo)
 
 Cada despliegue queda documentado: el plan exportado y el registro de la
 transacción se guardan en logs/ para soporte y auditoría.
@@ -221,29 +227,34 @@ Ideal para entregar a clientes después de un servicio de mantenimiento.
 
 # 📦 Aplicaciones del catálogo
 
-Todo el software desplegable vive en el catálogo (`catalog/`), organizado en
-bundles y perfiles. El catálogo actual incluye:
+Todo el software desplegable vive en el catálogo (`catalog/`): cada
+aplicación pertenece a exactamente una categoría, y esa categoría es
+puramente de navegación — nunca afecta cómo se instala. El catálogo actual
+incluye:
 
-### JB Essentials (recomendados en todos los perfiles)
+### Utilidades
 
 - AppCleaner
 - Keka
 - Rectangle
-- Stats
-- PDFgear (instalación manual — no disponible en Homebrew)
 - OpenLogi
+- Mole
+- Android Platform Tools
+
+### Hardware
+
+- AlDente
+- Macs Fan Control
+- BetterDisplay
+- Stats
 
 ### Productividad
 
 - Microsoft Word
 - Microsoft Excel
 - OneDrive
-
-### Personal
-
+- PDFgear (instalación manual — no disponible en Homebrew)
 - ChatGPT
-- Discord
-- Floorp
 
 ### Desarrollo
 
@@ -255,28 +266,25 @@ bundles y perfiles. El catálogo actual incluye:
 - Codex
 - Google Antigravity
 
-### Redes y diagnóstico
+### Redes
 
 - Tailscale
 - Wireshark
 - Nmap
 - Angry IP Scanner
 
-### Herramientas de reparación
-
-- Android Platform Tools
-- Mole
-
 ### Multimedia
 
 - Kdenlive
 - GIMP
 
-### Recomendadas según hardware
+### Comunicación
 
-- AlDente
-- Macs Fan Control
-- BetterDisplay
+- Discord
+
+### Navegadores
+
+- Floorp
 
 Agregar una aplicación nueva es editar un archivo de texto en `catalog/` —
 sin cambios de código. Ver [catalog/README.md](catalog/README.md).

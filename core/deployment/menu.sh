@@ -3,373 +3,171 @@
 # =========================
 # Deployment menus
 # =========================
-# Navigation is generated entirely from catalog data via the hierarchy
-# queries in catalog.sh — no profile, bundle, or category name is
-# hardcoded here. Every screen answers one question and stays at ~7
-# visible entries; growth is absorbed by the catalog, not by menu code.
+# One workflow, one selection model. Navigation is generated entirely from
+# catalog data (list_presets_ordered, list_app_categories) — no preset or
+# category name is hardcoded here.
+#
+# Flow: Quick Presets (optional) -> Application Catalog -> confirm.sh's
+# review/confirmation screen -> install. Whether an application entered the
+# selection via a preset, a hardware recommendation, or a manual toggle,
+# it is the exact same kind of member of SELECTED_APPS by the time the
+# Application Catalog screen (or the plan) sees it — see selection.sh.
 
 # =========================
-# Bundle review — every bundle offers three choices before planning:
-# install everything, customize (per-app toggle), or skip the bundle.
-# The review only COLLECTS decisions; the planner applies them, so
-# nothing is ever filtered at installation time.
+# Application Catalog — the one screen everything else feeds into. Groups
+# applications by CATEGORY for browsing; toggling is a flat, continuously
+# numbered list so parse_selection's "1,3-5" syntax works across the whole
+# screen regardless of category boundaries. An incompatible application is
+# shown with its reason instead of a checkbox — never selectable, never a
+# silent gap in the numbering scheme technicians rely on.
 # =========================
 
-REVIEW_BUNDLES=""    # bundle IDs kept by the technician
-REVIEW_EXCLUDED=""   # app IDs deselected during customization
+# run_application_catalog — interactive toggle loop over SELECTED_APPS.
+# Returns 1 if the technician cancels (0), 0 otherwise (Enter to continue).
+run_application_catalog() {
 
-# _customize_bundle BUNDLE — per-app toggle loop; deselected apps are
-# appended to REVIEW_EXCLUDED (the planner records them as named skips)
-_customize_bundle() {
+    local tag id reason selection item mark note pick provenance
+    local -a categories=()
+    local -a app_ids=()
 
-    local bundle="$1"
-    local app index count selection item mark
-    local -a apps=()
-    local -a states=()
-
-    while IFS= read -r app; do
-        [[ -z "$app" ]] && continue
-        apps+=("$app")
-        states+=(1)
-    done < <(bundle_apps "$bundle")
-
-    count="${#apps[@]}"
+    while IFS= read -r tag; do
+        [[ -n "$tag" ]] && categories+=("$tag")
+    done < <(list_app_categories)
 
     while true; do
 
-        print_section "🧩 Personalizar: $(bundle_display_name "$bundle")"
-        echo "Aplicaciones incluidas en este bundle:"
-        echo ""
+        app_ids=()
 
-        for ((index=0; index<count; index++)); do
-            if [[ "${states[$index]}" -eq 1 ]]; then
-                mark="✓"
-            else
-                mark=" "
-            fi
-            printf "[%s] %s) %s\n" "$mark" "$((index + 1))" \
-                "$(app_field "${apps[$index]}" NAME)"
-        done
+        print_section "🗂️ Catálogo de aplicaciones"
+        printf "Seleccionadas: %s\n" "$(selection_count)"
 
-        echo ""
-        printf "Números para activar/desactivar (ej: 1,3) · Enter para confirmar: "
-        read -r selection || break
+        for tag in "${categories[@]}"; do
 
-        [[ -z "$selection" ]] && break
+            local -a cat_apps=()
+            while IFS= read -r id; do
+                [[ -n "$id" ]] && cat_apps+=("$id")
+            done < <(apps_in_category "$tag")
 
-        while IFS= read -r item; do
-            index=$((item - 1))
-            states[$index]=$((1 - states[$index]))
-        done < <(parse_selection "$selection" "$count")
-
-    done
-
-    for ((index=0; index<count; index++)); do
-        if [[ "${states[$index]}" -eq 0 ]]; then
-            REVIEW_EXCLUDED+="${apps[$index]}"$'\n'
-        fi
-    done
-}
-
-# run_bundle_review BUNDLES(newline-separated IDs)
-# Populates REVIEW_BUNDLES / REVIEW_EXCLUDED. Returns 1 when the
-# technician skipped every bundle (nothing left to plan).
-run_bundle_review() {
-
-    local bundle app choice index
-    local -a review_queue=()
-
-    REVIEW_BUNDLES=""
-    REVIEW_EXCLUDED=""
-
-    # Collected first so the interactive reads below keep stdin
-    while IFS= read -r bundle; do
-        [[ -n "$bundle" ]] && review_queue+=("$bundle")
-    done <<< "$1"
-
-    for ((index=0; index<${#review_queue[@]}; index++)); do
-        bundle="${review_queue[$index]}"
-
-        while true; do
-
-            print_section "📦 $(render_bundle "$bundle")"
-
-            while IFS= read -r app; do
-                [[ -z "$app" ]] && continue
-                printf "   • %s\n" "$(app_field "$app" NAME)"
-            done < <(bundle_apps "$bundle")
+            [[ "${#cat_apps[@]}" -eq 0 ]] && continue
 
             echo ""
-            echo "1) Instalar todo"
-            echo "2) Personalizar"
-            echo "3) Omitir bundle"
-            printf "Selecciona una opción: "
-            read -r choice || choice="3"
+            printf -- "── %s ──\n" "$tag"
 
-            case "$choice" in
-                1)
-                    REVIEW_BUNDLES+="$bundle"$'\n'
-                    break
-                    ;;
-                2)
-                    REVIEW_BUNDLES+="$bundle"$'\n'
-                    _customize_bundle "$bundle"
-                    break
-                    ;;
-                3)
-                    info "ℹ️ Bundle omitido: $(bundle_display_name "$bundle")"
-                    break
-                    ;;
-                *)
-                    warn "⚠️ Opción inválida"
-                    ;;
-            esac
+            for id in "${cat_apps[@]}"; do
+
+                if reason="$(app_incompatibility_reason "$id")"; then
+
+                    app_ids+=("$id")
+
+                    mark=" "
+                    note=""
+                    if selection_contains "$id"; then
+                        mark="✓"
+                        provenance="$(selection_provenance "$id")"
+                        case "$provenance" in
+                            preset:*) note="  · de la plantilla" ;;
+                            hardware) note="  · recomendado para tu equipo ★" ;;
+                        esac
+                    fi
+
+                    pick=""
+                    [[ "$(app_field "$id" JB_PICK)" == "true" ]] && pick="  · JB Pick ⭐"
+
+                    printf "[%s] %2d) %s%s%s\n" "$mark" "${#app_ids[@]}" \
+                        "$(app_field "$id" NAME)" "$pick" "$note"
+                else
+                    printf "    ⛔ %s — %s\n" "$(app_field "$id" NAME)" "$reason"
+                fi
+
+            done
 
         done
 
-    done
+        echo ""
+        echo "Números para incluir/excluir (ej: 1,3-5) · Enter para continuar · 0 para cancelar"
+        printf "Selección: "
+        read -r selection || selection="0"
 
-    [[ -n "$REVIEW_BUNDLES" ]]
-}
+        if [[ "$selection" == "0" ]]; then
+            return 1
+        fi
 
-# =========================
-# Hardware recommendations — catalog applications whose HW_RECOMMEND
-# matches this machine, offered as plan extras (provenance "hardware")
-# =========================
+        [[ -z "$selection" ]] && return 0
 
-HW_EXTRAS=""    # app IDs the technician accepted
-
-offer_hardware_extras() {
-
-    local family has_ext=0
-    local id selection item index
-    local -a ids=()
-
-    HW_EXTRAS=""
-
-    detect_machine_family
-    family="$MACHINE_FAMILY"
-    has_external_display && has_ext=1
-
-    while IFS= read -r id; do
-        [[ -z "$id" ]] && continue
-
-        # Verified as installed → nothing to recommend
-        case "$(app_field "$id" INSTALL_METHOD)" in
-            brew) brew_formula_installed "$(app_field "$id" PACKAGE)" && continue ;;
-            cask) brew_cask_installed "$(app_field "$id" PACKAGE)" && continue ;;
-        esac
-
-        ids+=("$id")
-    done < <(apps_recommended_for_hardware "$family" "$has_ext")
-
-    [[ "${#ids[@]}" -eq 0 ]] && return 0
-
-    print_section "🧠 Recomendaciones para este Mac"
-
-    for ((index=0; index<${#ids[@]}; index++)); do
-        printf "%s) %s — %s\n" "$((index + 1))" \
-            "$(app_field "${ids[$index]}" NAME)" \
-            "$(app_field "${ids[$index]}" DESCRIPTION)"
-    done
-
-    echo ""
-    echo "[a] Añadir todas   [0] Omitir"
-    printf "Selecciona recomendaciones (ej: 1,2): "
-    read -r selection || selection="0"
-
-    selection="${selection// /}"
-
-    if [[ "$selection" == "a" || "$selection" == "all" ]]; then
-        for id in "${ids[@]}"; do
-            HW_EXTRAS+="$id"$'\n'
-        done
-    elif [[ -n "$selection" && "$selection" != "0" ]]; then
         while IFS= read -r item; do
-            HW_EXTRAS+="${ids[$((item - 1))]}"$'\n'
-        done < <(parse_selection "$selection" "${#ids[@]}")
-    fi
-
-    return 0
-}
-
-# =========================
-# Profile selection
-# =========================
-
-select_profile() {
-
-    run_bundle_review "$(profile_bundles "$1")" || {
-        warn "⚠️ Todos los bundles fueron omitidos; no hay nada que desplegar"
-        return 0
-    }
-
-    offer_hardware_extras
-
-    build_deployment_plan "$1" "$REVIEW_EXCLUDED" "$HW_EXTRAS" "$REVIEW_BUNDLES" \
-        || return 0
-
-    run_plan_confirmation
-}
-
-# Category submenu (multi-profile categories); collapse handled by caller
-open_category() {
-
-    local category="$1"
-    local direct choice index count label
-    local profiles=()
-
-    direct="$(category_direct_profile "$category")"
-
-    if [[ -n "$direct" ]]; then
-        select_profile "$direct"
-        return 0
-    fi
-
-    while true; do
-
-        profiles=()
-        while IFS= read -r index; do
-            [[ -n "$index" ]] && profiles+=("$index")
-        done < <(profiles_in_category "$category")
-
-        count="${#profiles[@]}"
-
-        print_section "🧭 $category"
-        echo "Selecciona un perfil:"
-        echo ""
-
-        for ((index=0; index<count; index++)); do
-            label="$(profile_field "${profiles[$index]}" SUBCATEGORY)"
-            [[ -z "$label" ]] && label="$(profile_field "${profiles[$index]}" NAME)"
-            render_category "$((index + 1))" "$label" 0
-        done
-
-        echo "0) Volver"
-        echo ""
-        printf "Selecciona una opción: "
-        read -r choice || choice="0"
-
-        if [[ "$choice" == "0" ]]; then
-            return 0
-        elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "$count" ]]; then
-            select_profile "${profiles[$((choice - 1))]}"
-        else
-            warn "⚠️ Opción inválida"
-        fi
+            id="${app_ids[$((item - 1))]}"
+            selection_toggle "$id" manual
+        done < <(parse_selection "$selection" "${#app_ids[@]}")
 
     done
 }
 
 # =========================
-# Custom flow — compose bundles
+# Quick Presets (optional) -> Application Catalog -> confirmation
 # =========================
 
-run_custom_flow() {
+# start_deployment_flow [PRESET_ID] — PRESET_ID empty means "start empty".
+# Every path (preset or empty) goes through the exact same catalog and
+# confirmation screens; there is no separate preset-execution path.
+start_deployment_flow() {
 
-    local bundle choice index count item selected=""
-    local bundles=()
+    local preset_id="${1:-}"
 
-    bundles=()
-    while IFS= read -r bundle; do
-        [[ -n "$bundle" ]] && bundles+=("$bundle")
-    done < <(list_bundles)
-
-    count="${#bundles[@]}"
-
-    print_section "🧩 Perfil personalizado"
-    echo "Selecciona los bundles a combinar:"
-    echo ""
-
-    for ((index=0; index<count; index++)); do
-        render_category "$((index + 1))" "$(render_bundle "${bundles[$index]}")" 0
-    done
-
-    echo "0) Volver"
-    echo ""
-    printf "Selecciona bundles (ej: 1,3): "
-    read -r choice || choice="0"
-
-    [[ -z "$choice" || "$choice" == "0" ]] && return 0
-
-    while IFS= read -r item; do
-        bundle="${bundles[$((item - 1))]}"
-        if ! grep -qx "$bundle" <<< "$selected"; then
-            selected+="$bundle"$'\n'
-        fi
-    done < <(parse_selection "$choice" "$count")
-
-    if [[ -z "$selected" ]]; then
-        warn "⚠️ No se seleccionó ningún bundle"
-        return 0
+    if [[ -n "$preset_id" ]]; then
+        load_preset_into_selection "$preset_id"
+    else
+        reset_selection
     fi
 
-    run_bundle_review "$selected" || {
-        warn "⚠️ Todos los bundles fueron omitidos; no hay nada que desplegar"
+    apply_hardware_recommendations
+
+    run_application_catalog || {
+        info "ℹ️ Selección cancelada"
         return 0
     }
 
-    offer_hardware_extras
+    if [[ "$(selection_count)" -eq 0 ]]; then
+        warn "⚠️ No se seleccionó ninguna aplicación"
+        return 0
+    fi
 
-    build_custom_plan "$REVIEW_BUNDLES" "$REVIEW_EXCLUDED" "$HW_EXTRAS"
+    build_plan_from_selection "$preset_id"
 
     run_plan_confirmation
 }
 
 # =========================
-# JB Picks browser (read-only, educational)
-# =========================
-
-show_jb_picks() {
-
-    local id
-
-    print_section "⭐ JB Picks — Recomendados por JB Repair"
-    info "ℹ️ Aplicaciones respaldadas por años de soporte a clientes"
-    echo ""
-
-    for id in $(list_jb_picks); do
-        render_jb_pick "$id"
-        echo ""
-    done
-
-    printf "Presiona Enter para volver... "
-    read -r _ || true
-}
-
-# =========================
-# Main deployment menu
+# Main deployment menu — one flat screen, no category/profile nesting.
+# JB Picks are not a separate screen or workflow: a JB_PICK=true application
+# is annotated inline wherever it appears in the Application Catalog (see
+# run_application_catalog) and in the plan's explain view — the same catalog
+# flag, surfaced where selection actually happens, not a special case.
 # =========================
 
 run_deployment_menu() {
 
-    local category choice index count
-    local categories=()
+    local preset_id choice index count
+    local -a preset_ids=()
 
     while true; do
 
-        categories=()
-        while IFS= read -r category; do
-            [[ -n "$category" ]] && categories+=("$category")
-        done < <(list_categories)
+        preset_ids=()
+        while IFS= read -r preset_id; do
+            [[ -n "$preset_id" ]] && preset_ids+=("$preset_id")
+        done < <(list_presets_ordered)
 
-        count="${#categories[@]}"
+        count="${#preset_ids[@]}"
 
         print_section "🚀 Deployment"
-        echo "¿Qué tipo de equipo preparamos?"
+        echo "Plantillas rápidas (opcional) — podrás revisar y modificar la"
+        echo "selección antes de instalar:"
         echo ""
 
         for ((index=0; index<count; index++)); do
-            category="${categories[$index]}"
-            if [[ -n "$(category_direct_profile "$category")" ]]; then
-                render_category "$((index + 1))" "$category" 0
-            else
-                render_category "$((index + 1))" "$category" 1
-            fi
+            render_category "$((index + 1))" "$(render_preset "${preset_ids[$index]}")" 0
         done
 
-        render_category "$((count + 1))" "Personalizado (combinar bundles)" 0
-        render_category "$((count + 2))" "JB Picks ⭐" 0
+        render_category "$((count + 1))" "Empezar vacío" 0
         echo "0) Volver"
         echo ""
         printf "Selecciona una opción: "
@@ -378,11 +176,11 @@ run_deployment_menu() {
         if [[ "$choice" == "0" ]]; then
             return 0
         elif [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "$count" ]]; then
-            open_category "${categories[$((choice - 1))]}"
+            start_deployment_flow "${preset_ids[$((choice - 1))]}"
+            return 0
         elif [[ "$choice" == "$((count + 1))" ]]; then
-            run_custom_flow
-        elif [[ "$choice" == "$((count + 2))" ]]; then
-            show_jb_picks
+            start_deployment_flow ""
+            return 0
         else
             warn "⚠️ Opción inválida"
         fi

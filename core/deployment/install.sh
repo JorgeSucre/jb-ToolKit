@@ -149,7 +149,7 @@ run_plan_installation() {
     fi
 
     echo ""
-    if ! ask_yes_no "¿Preparar este equipo con el perfil $PLAN_PROFILE_NAME?"; then
+    if ! ask_yes_no "¿Preparar este equipo con la plantilla $PLAN_PRESET_NAME?"; then
         plan_file="$(export_deployment_plan)"
         txn_begin "$(basename "$plan_file")"
         TXN_CANCELLED="true"
@@ -248,7 +248,7 @@ run_plan_installation() {
     txn_export >/dev/null
 
     write_state_values \
-        "DEPLOYED_PROFILE=$PLAN_PROFILE_ID" \
+        "DEPLOYED_PRESET=$PLAN_PRESET_ID" \
         "LAST_DEPLOYMENT=$TXN_END" \
         "DEPLOYMENT_APPS_INSTALLED=$TXN_INSTALLED" \
         "DEPLOYMENT_APPS_MANUAL=$TXN_MANUAL" \

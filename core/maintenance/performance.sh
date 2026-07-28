@@ -22,7 +22,7 @@ apply_light_optimization() {
 
     PERFORMANCE_PROFILE="light"
 
-    log "⚡ Aplicando optimización ligera..."
+    [[ "$silent" != "true" ]] && log "⚡ Aplicando optimización ligera..."
 
     # Reduce Motion
     defaults write com.apple.universalaccess \
@@ -59,7 +59,12 @@ apply_light_optimization() {
 
 apply_aggressive_optimization() {
 
-    log "⚡ Aplicando optimización agresiva..."
+    # Aggressive intentionally builds on Light — same defaults writes,
+    # applied once, plus its own additional changes below — rather than
+    # duplicating ~10 `defaults write` calls between the two functions.
+    # silent=true suppresses Light's own narration so the technician sees
+    # one coherent operation instead of two back-to-back "Applying..." lines.
+    log "⚡ Aplicando optimización agresiva (incluye la ligera + ajustes adicionales)..."
 
     apply_light_optimization "true"
 
@@ -99,12 +104,11 @@ EOF
 
     done
 
-    success "✔ Optimización agresiva aplicada"
+    success "✔ Optimización agresiva aplicada (incluye la ligera)"
 
-    echo "• Animaciones reducidas"
-    echo "• Transparencias reducidas"
-    echo "• Apps de inicio optimizadas"
-    echo "• Procesos secundarios reducidos"
+    echo "• Animaciones y transparencias reducidas (ligera)"
+    echo "• Apps de inicio optimizadas (agresiva)"
+    echo "• Procesos secundarios reducidos (agresiva)"
 
     info "ℹ️ Se redujeron procesos visuales y apps secundarias de inicio"
 }
@@ -158,7 +162,7 @@ run_performance_optimization() {
     print_section "⚡ Optimización de rendimiento"
 
     echo "1) Ligera (recomendado y seguro)"
-    echo "2) Agresiva"
+    echo "2) Agresiva (incluye la ligera + ajustes adicionales)"
     echo "3) Restaurar valores por defecto"
     echo "0) Omitir"
 

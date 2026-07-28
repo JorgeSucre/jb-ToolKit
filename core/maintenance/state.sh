@@ -3,8 +3,7 @@
 # =========================
 # State helpers
 # =========================
-
-STATE_FILE="$BASE_DIR/logs/state.env"
+# STATE_FILE is owned by core/utils.sh; not redefined here.
 
 # =========================
 # State initialization

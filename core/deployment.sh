@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$BASE_DIR/core/utils.sh"
 # Session is owned by the jb launcher.
 # Only initialize a fallback session when run standalone (outside jb).
@@ -13,7 +13,7 @@ source "$BASE_DIR/core/bootstrap/ui.sh"
 source "$BASE_DIR/core/bootstrap/hardware.sh"
 source "$BASE_DIR/core/deployment/catalog.sh"
 source "$BASE_DIR/core/deployment/doctor.sh"
-source "$BASE_DIR/core/deployment/resolve.sh"
+source "$BASE_DIR/core/deployment/selection.sh"
 source "$BASE_DIR/core/deployment/planner.sh"
 source "$BASE_DIR/core/deployment/render.sh"
 source "$BASE_DIR/core/deployment/menu.sh"
@@ -27,24 +27,31 @@ set_ui_context "Deployment"
 # CLI helpers
 # =========================
 # Every plan command is a different representation of the SAME Deployment
-# Plan: build once through the planner, then hand to a renderer. No
-# command has planning logic of its own.
+# Plan: load the named preset into a fresh selection (no manual editing —
+# that's an interactive-only concept), build the plan once, then hand to a
+# renderer. No command has planning logic of its own.
 
 require_plan() {
 
-    local mode="$1" profile="$2"
+    local mode="$1" preset="$2"
 
-    if [[ -z "$profile" ]]; then
-        error_msg "❌ Uso: deployment.sh $mode <perfil>"
+    if [[ -z "$preset" ]]; then
+        error_msg "❌ Uso: deployment.sh $mode <preset>"
         echo ""
-        echo "Perfiles disponibles:"
-        for id in $(list_profiles); do
-            printf "   • %-14s %s\n" "$id" "$(render_profile "$id")"
+        echo "Presets disponibles:"
+        for id in $(list_presets_ordered); do
+            printf "   • %-14s %s\n" "$id" "$(render_preset "$id")"
         done
         exit 1
     fi
 
-    build_deployment_plan "$profile" || exit 1
+    if ! preset_exists "$preset"; then
+        error_msg "❌ El preset no existe: $preset"
+        exit 1
+    fi
+
+    load_preset_into_selection "$preset"
+    build_plan_from_selection "$preset"
 }
 
 # =========================
@@ -122,7 +129,7 @@ case "${1:-}" in
     *)
         error_msg "❌ Opción no reconocida: $1"
         echo ""
-        echo "Comandos: --validate | --doctor | --resolve <perfil> | --explain <perfil> | --tree <perfil> | --plan <perfil>"
+        echo "Comandos: --validate | --doctor | --resolve <preset> | --explain <preset> | --tree <preset> | --plan <preset>"
         exit 1
         ;;
 

@@ -159,11 +159,16 @@ cleanup_caches() {
         -mtime +7 \
         -delete 2>/dev/null || true
 
-    local remaining
+    local remaining remaining_mb
     remaining=$(find ~/Library/Caches -type f -mtime +7 2>/dev/null | wc -l | tr -d ' ')
     CACHE_FILES_REMOVED=$(( CACHE_FILE_COUNT - remaining ))
     [[ "$CACHE_FILES_REMOVED" -lt 0 ]] && CACHE_FILES_REMOVED=0
 
+    # Files that failed to delete (locked, in use) must not be counted as
+    # freed — subtract what still matches the predicate, not what we hoped
+    # to remove.
+    remaining_mb=$(safe_old_files_size_mb ~/Library/Caches 7)
+    CACHE_MB_FREED=$((CACHE_MB_FREED - remaining_mb))
     [[ "$CACHE_MB_FREED" -lt 0 ]] && CACHE_MB_FREED=0
 
     TOTAL_FREED_MB=$((TOTAL_FREED_MB + CACHE_MB_FREED))
@@ -192,11 +197,13 @@ cleanup_logs() {
         -mtime +14 \
         -delete 2>/dev/null || true
 
-    local remaining
+    local remaining remaining_mb
     remaining=$(find ~/Library/Logs -type f -mtime +14 2>/dev/null | wc -l | tr -d ' ')
     LOG_FILES_REMOVED=$(( LOG_FILE_COUNT - remaining ))
     [[ "$LOG_FILES_REMOVED" -lt 0 ]] && LOG_FILES_REMOVED=0
 
+    remaining_mb=$(safe_old_files_size_mb ~/Library/Logs 14)
+    LOG_MB_FREED=$((LOG_MB_FREED - remaining_mb))
     [[ "$LOG_MB_FREED" -lt 0 ]] && LOG_MB_FREED=0
 
     TOTAL_FREED_MB=$((TOTAL_FREED_MB + LOG_MB_FREED))
@@ -225,11 +232,13 @@ cleanup_trash() {
         -mtime +7 \
         -exec rm -rf {} + 2>/dev/null || true
 
-    local remaining
+    local remaining remaining_mb
     remaining=$(find ~/.Trash -mindepth 1 -mtime +7 2>/dev/null | wc -l | tr -d ' ')
     TRASH_FILES_REMOVED=$(( TRASH_FILE_COUNT - remaining ))
     [[ "$TRASH_FILES_REMOVED" -lt 0 ]] && TRASH_FILES_REMOVED=0
 
+    remaining_mb=$(safe_old_files_size_mb ~/.Trash 7)
+    TRASH_MB_FREED=$((TRASH_MB_FREED - remaining_mb))
     [[ "$TRASH_MB_FREED" -lt 0 ]] && TRASH_MB_FREED=0
 
     TOTAL_FREED_MB=$((TOTAL_FREED_MB + TRASH_MB_FREED))

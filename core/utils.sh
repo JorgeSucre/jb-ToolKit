@@ -3,10 +3,10 @@
 # =========================
 # Base Config & Directories
 # =========================
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export BASE_DIR
 export STATE_FILE="$BASE_DIR/logs/state.env"
-export JB_VERSION="${JB_VERSION:-2.0.1}"
+export JB_VERSION="${JB_VERSION:-2.2.2}"
 mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
 
 # =========================
@@ -116,25 +116,36 @@ calculate_health_score() {
     echo "$score"
 }
 
-state_value() {
-    local key="$1"
+# read_kv_value FILE KEY [DEFAULT] — generic flat KEY=value lookup. Backs
+# state_value ($STATE_FILE) and volume metadata ($mount/.jbtoolkit) so both
+# formats share one parser instead of two copies of the same awk line.
+read_kv_value() {
+    local file="$1" key="$2" default="${3:-N/A}"
     local value=""
 
-    if [[ -f "$STATE_FILE" ]]; then
+    if [[ -f "$file" ]]; then
         value=$(awk -F= -v key="$key" \
             '$1 == key {print substr($0, length(key) + 2); exit}' \
-            "$STATE_FILE")
+            "$file")
     fi
 
-    printf "%s\n" "${value:-N/A}"
+    printf "%s\n" "${value:-$default}"
 }
 
-write_state_values() {
-    local temp_file="${STATE_FILE}.tmp.$$"
+state_value() {
+    read_kv_value "$STATE_FILE" "$1" "N/A"
+}
+
+# write_kv_values FILE "K1=v1" "K2=v2" … — update-in-place: unrelated keys
+# in FILE are preserved. Backs write_state_values ($STATE_FILE) and any
+# other flat KEY=value file (volume metadata).
+write_kv_values() {
+    local file="$1"; shift
+    local temp_file="${file}.tmp.$$"
     local key pair
 
-    mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
-    [[ -f "$STATE_FILE" ]] && cp "$STATE_FILE" "$temp_file" || : > "$temp_file"
+    mkdir -p "$(dirname "$file")" 2>/dev/null || true
+    [[ -f "$file" ]] && cp "$file" "$temp_file" || : > "$temp_file"
 
     for pair in "$@"; do
         key="${pair%%=*}"
@@ -143,7 +154,11 @@ write_state_values() {
         printf "%s\n" "$pair" >> "$temp_file"
     done
 
-    mv "$temp_file" "$STATE_FILE"
+    mv "$temp_file" "$file"
+}
+
+write_state_values() {
+    write_kv_values "$STATE_FILE" "$@"
 }
 
 session_timestamp() {
@@ -424,11 +439,6 @@ brew_available() {
     ensure_brew_path || return 1
     brew --version >/dev/null 2>&1 || return 1
     return 0
-}
-
-brew_prefix_safe() {
-    ensure_brew_path || return 1
-    brew --prefix 2>/dev/null
 }
 
 # =========================

@@ -11,14 +11,14 @@
 # Transaction contract (module-level globals):
 #   TXN_ID              unique identifier (txn_<stamp>)
 #   TXN_SESSION         session log basename (links to full CMD/EXIT evidence)
-#   TXN_PROFILE         profile ID from the executed plan
+#   TXN_PRESET          preset ID from the executed plan ("custom" if none)
 #   TXN_PLAN_ID         plan identifier
 #   TXN_PLAN_FILE       exported plan file basename
 #   TXN_START / TXN_END / TXN_DURATION
 #   TXN_ATTEMPTED       apps handed to the engine
 #   TXN_INSTALLED       apps CONFIRMED installed afterward (verified count)
 #   TXN_ALREADY         apps verified present before execution
-#   TXN_SKIPPED         plan-level skips (compatibility + deselections)
+#   TXN_SKIPPED         plan-level skips (compatibility exclusions only)
 #   TXN_MANUAL          apps that require a manual installation step
 #   TXN_FAILED          apps that did not verify, or were unavailable
 #   TXN_CANCELLED       true when the user backed out at a gate
@@ -28,7 +28,7 @@
 
 TXN_ID=""
 TXN_SESSION=""
-TXN_PROFILE=""
+TXN_PRESET=""
 TXN_PLAN_ID=""
 TXN_PLAN_FILE=""
 TXN_START=""
@@ -54,7 +54,7 @@ txn_begin() {
 
     TXN_ID="txn_$(date '+%Y-%m-%d_%H-%M-%S')"
     TXN_SESSION="$(basename "${JB_SESSION_LOG:-desconocido}")"
-    TXN_PROFILE="$PLAN_PROFILE_ID"
+    TXN_PRESET="$PLAN_PRESET_ID"
     TXN_PLAN_ID="$PLAN_ID"
     TXN_PLAN_FILE="${1:-}"
     TXN_START="$(session_timestamp)"
@@ -101,7 +101,7 @@ txn_export() {
         echo "#          FAILED_APP=id|nombre|motivo"
         echo "TXN_ID=$TXN_ID"
         echo "SESSION=$TXN_SESSION"
-        echo "PROFILE=$TXN_PROFILE"
+        echo "PRESET=$TXN_PRESET"
         echo "PLAN_ID=$TXN_PLAN_ID"
         echo "PLAN_FILE=$TXN_PLAN_FILE"
         echo "START=$TXN_START"

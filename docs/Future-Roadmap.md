@@ -4,19 +4,32 @@ This document separates what **exists today** from what is **planned**, and reco
 known inconsistencies for future consideration. Planned items are goals, not
 designs — no implementation details are prescribed here.
 
-## Implemented today (v2.0.1)
+## Implemented today (v2.2.2)
 
 - Interactive launcher with five modules: Bootstrap, Diagnostics, Maintenance, Deployment, Report
-- Workstation deployment: catalog-driven profiles/bundles with the generic
-  `INSTALL_METHOD` model (brew/cask automated; mas/pkg/dmg/manual as first-class
-  manual steps), interactive bundle review (install all / customize per app /
-  skip), read-only pre-flight validation, per-application resilient installation
-  with verified outcomes, Deployment Planner with plan export, JB Picks browser,
-  Catalog Doctor, Installation Transaction records with per-category named
-  outcomes and failure reasons
+- Workstation deployment: a flat `Catalog → Applications → Selected
+  Applications → Installation Plan → Execution` model (no bundle/profile
+  grouping layer — see [architecture/0006-deployment-flattening.md](architecture/0006-deployment-flattening.md)).
+  Presets are predefined selections, one `[id]` section per preset in a
+  single `catalog/presets.conf` (just an app-ID list — see
+  [architecture/0007-catalog-consistency.md](architecture/0007-catalog-consistency.md));
+  the generic `INSTALL_METHOD` model (brew/cask automated; mas/pkg/dmg/manual
+  as first-class manual steps); one Application Catalog screen (grouped by
+  each application's single `CATEGORY`, so every app appears in exactly one
+  section with one selection number; add/remove/toggle without leaving it,
+  incompatible apps shown live instead of deferred); hardware
+  recommendations folded into the same selection; read-only pre-flight
+  validation; per-application resilient installation with verified outcomes;
+  Installation Planner with plan export and a preset-vs-selection diff view
+  (`--tree`); JB Picks annotated inline in the Application Catalog and plan
+  explain view (not a separate screen — see
+  [architecture/0008-integration-hardening.md](architecture/0008-integration-hardening.md));
+  Catalog Doctor; Installation Transaction
+  records with per-category named outcomes and failure reasons
 - Bootstrap as an onboarding wizard over the Deployment library: base tools (CLT,
   Homebrew, verified fastfetch), pending-update offer, hardware detection, one
-  catalog-generated question, then the shared planner and installer
+  flat preset question, then the exact same selection/planner/installer
+  pipeline the Deployment module uses standalone
 - Homebrew lifecycle: install, validate, index refresh, session-level query
   caching with post-mutation invalidation
 - Hardware-based package recommendations by machine family, encoded as catalog
@@ -24,6 +37,23 @@ designs — no implementation details are prescribed here.
 - Health score (CPU / RAM / disk) with baseline tracking across runs
 - Preview-confirm cleanup with **confirmed** (re-counted) deletion accounting
 - Storage analysis: large files, cloud-sync detection, LaunchAgents listing
+- Storage Platform service (`core/platform/storage/`), the first tenant of a
+  `core/platform/` layer: Adopted Data Volumes (a `.jbtoolkit/` directory —
+  `metadata.env` + `state.env` + `plans/` + `transactions/`, living on the
+  volume itself so records travel with the drive — turn a generic external
+  APFS disk into recognized managed storage, with transparent schema
+  migration for volumes adopted by an earlier toolkit version), a generic
+  scan → plan → preview → execute → verify → rollback → commit pipeline with
+  UUID-identified transactions persisted incrementally at each real lifecycle
+  transition (`planned → executing → committed/failed/cancelled`), a public
+  `storage::*` API (`api.sh`) that is the only surface other modules should
+  call, and two migration profiles built on it as plugin directories — Home
+  (editable exclusion list) and Downloads (proof the engine generalizes
+  without duplicating logic). Verifies each copy via checksum diff before
+  ever offering to delete the source; a copy failure rolls back
+  automatically, a verify failure does not. See
+  [Storage-Architecture.md](Storage-Architecture.md) and
+  [architecture/](architecture/) for the ADRs.
 - App risk scoring (architecture, size, staleness) with user-driven Trash moves
 - Performance profiles: light, aggressive (superset of light), restore-defaults
 - Session logging with full command/output/exit capture; artifact retention
@@ -36,9 +66,13 @@ designs — no implementation details are prescribed here.
 | Goal | Intent | Status |
 |---|---|---|
 | **Deployment history** | Browse past Installation Transactions | Records exist (`logs/deployment_txn_*.env`); `history.sh` browser pending |
+| **Storage history browsing** | Browse past Storage Migration Transactions | `storage::transactions` already returns the data ([Storage-Architecture.md](Storage-Architecture.md)); only a browser UI is missing |
+| **Fine-grained migration resume** | Detect and continue an interrupted migration | `STORAGE_TXN_STATE` checkpoints already make "was this interrupted" answerable; the two-pass `storage_execute` needed for real `copied`/`verified` checkpoints is deferred (see [architecture/0004-transactions.md](architecture/0004-transactions.md)) — today, resuming means safely re-running `storage::run_profile` against the same plan, since rsync is idempotent |
+| **Photos Library / Steam Library / Docker / VMs / Cloud Sync / Backups / Media Libraries profiles** | New migration profiles on the Storage Platform pipeline | Architecture and contract exist ([Storage-Architecture.md](Storage-Architecture.md)); each is a new `core/platform/storage/profiles/<id>/` directory (`profile.env` + `scan.sh`) — no engine changes needed |
+| **Additional Platform services** | State, Metrics, Logging, Report, Events, Config under `core/platform/` | Named and reasoned about in [architecture/0001-platform-philosophy.md](architecture/0001-platform-philosophy.md); none designed or implemented — the bar is a demonstrated second consumer or an equally explicit request, same as Storage's own origin |
 | **Automated `mas`/`pkg`/`dmg` installs** | Extend the engine beyond brew/cask | Catalog and plan already carry the method; only the execution branch in `install.sh` is missing |
-| **Vendor presets** | Per-organization compositions of profiles | Reserved space only (`catalog/vendors/`) — not designed yet |
-| **Plugin-like architecture** | Third-party/module extension points without touching core | Idea only |
+| **Vendor presets** | Per-organization compositions of presets | Reserved space only (`catalog/vendors/`) — not designed yet. Known tension: this is structurally the "bundle" concept removed in v2.2; design against that deliberately, see ADR-0006 |
+| **Plugin-like architecture** | Third-party/module extension points without touching core | Implemented for one subsystem (Storage's migration profiles); not generalized toolkit-wide |
 | **Cross-platform readiness** | Isolate macOS-specific calls so future non-macOS targets are feasible | Idea only |
 | **Improved reporting** | Richer PDF, historical trends, comparison between visits | Idea only |
 
@@ -62,9 +96,14 @@ are release blockers; several were consciously accepted.
    `set -Eeuo pipefail`; `maintenance.sh` omits `-e` (a failing cleanup step must not
    abort the run — arguably intentional); `diagnostics.sh` omits `-u`. Worth unifying
    deliberately, with the differences documented where they are intentional.
-4. **`STATE_FILE` defined in three places.** utils.sh exports it; `bootstrap.sh` and
-   `maintenance/state.sh` re-assign the identical value. Harmless today; a drift risk
-   if `logs/` ever moves.
+4. **~~`STATE_FILE` defined in three places~~ Resolved.** `core/utils.sh` is now the
+   sole owner; the redundant re-assignments in `bootstrap.sh` and
+   `maintenance/state.sh` are deleted. Related: every entry point's `BASE_DIR`
+   computation is now guarded (`${BASE_DIR:-...}`) to prefer an inherited value
+   over recomputing — this doesn't fix a live bug (every real invocation path
+   already converged on the same value), it's idiom alignment with
+   `init_session`'s existing fallback pattern, done as part of the Storage
+   Platform work's "no module calculates its root independently" requirement.
 5. **Aggressive-profile tweaks on modern macOS.** The Siri `defaults` keys and the
    System Events login-item removal are legacy APIs: on macOS 13+ they execute
    successfully but affect nothing (audit findings F-05/F-06). The code still serves

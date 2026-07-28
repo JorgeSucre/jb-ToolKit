@@ -78,6 +78,17 @@ its own lifecycle (like Deployment) — not a feature of an existing workflow. N
 maintenance capabilities are sub-modules under `core/maintenance/`; new setup
 capabilities extend `core/bootstrap/`.
 
+### When something belongs in `core/platform/<service>/`
+
+Rarer still — see [architecture/0001-platform-philosophy.md](architecture/0001-platform-philosophy.md).
+`core/platform/` is for genuinely reusable infrastructure with its own public
+API, consumed by multiple modules over time (today: only Storage; State,
+Metrics, Logging, Report, Events, and Config are named as future candidates,
+**not implemented** — don't scaffold empty directories for them). The bar: a
+demonstrated second consumer, or a request as explicit as the one that
+created Storage. Most new capabilities are sub-modules of an existing module,
+not a new Platform service.
+
 ---
 
 ## Shell scripting style
@@ -98,6 +109,12 @@ capabilities extend `core/bootstrap/`.
   (`# ===== … =====`).
 - Entry points set strict modes (see the per-module differences documented in
   [Future-Roadmap.md](Future-Roadmap.md) before copying one).
+- Every entry point computes `BASE_DIR` the same guarded way:
+  `BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"`
+  — reuse an inherited value (running as a child of `jb`) before
+  self-computing (standalone execution), mirroring `init_session`'s existing
+  fallback idiom. `core/utils.sh` is the single owner of `STATE_FILE`; don't
+  redefine it elsewhere.
 
 ## Naming conventions
 
@@ -143,7 +160,7 @@ tier deliberately; don't default everything to `|| true`.
 - Add keys with `write_state_values "KEY=value" …` — it preserves unrelated keys.
 - Read with `state_value KEY` and **always handle `N/A`** before treating a value as
   numeric or displaying it.
-- Keys record *facts about what happened* (`TOTAL_FREED_MB`, `DEPLOYED_PROFILE`), not
+- Keys record *facts about what happened* (`TOTAL_FREED_MB`, `DEPLOYED_PRESET`), not
   module internals or configuration.
 - Document new keys in the key inventory in [State-System.md](State-System.md) in the
   same change.
@@ -169,19 +186,56 @@ space only, confirmed counts only, cloud-synced paths excluded.
 `state.env` and the session log). Threshold-based summary lines follow the existing
 tier pattern.
 
+**Storage Platform (`core/platform/storage/`)** — the first Platform service; see
+[Storage-Architecture.md](Storage-Architecture.md) and
+[architecture/0002-storage-platform.md](architecture/0002-storage-platform.md).
+Two rules:
+- **Everything outside this directory goes through `api.sh`'s `storage::*`
+  functions.** Never read `.jbtoolkit/metadata.env`/`state.env` directly,
+  never call `volume.sh`/`engine.sh` internals from another module. If the
+  function you need doesn't exist yet, add it to `api.sh` as a thin wrapper
+  — don't reach past it.
+- **A new migration profile** (Photos Library, Steam Library, Docker, VMs,
+  Cloud Sync, Backups, Media Libraries, an arbitrary directory) is a new
+  directory under `core/platform/storage/profiles/<id>/`: a `profile.env`
+  (`PROFILE_ID`, `PROFILE_LABEL`, `DEST_SUBDIR` — quote values with spaces,
+  it's sourced as bash) plus a `scan.sh` defining exactly two callbacks,
+  `storage_profile_<id>_source_root` and `storage_profile_<id>_scan`. Never
+  touches `engine.sh`. If a new capability seems to need more than these two
+  callbacks, that need is either generic enough to add to every profile's
+  contract (update Storage-Architecture.md in the same change) or it doesn't
+  belong in a profile at all — per-profile `execute`/`verify` hooks were
+  explicitly rejected because copying and verification have zero
+  profile-specific variance and must stay that way for the safety guarantee
+  to hold.
+
 **Deployment catalog** — the catalog is data, governed by the contracts in
-[Catalog-Format.md](Catalog-Format.md). The rules that matter most: an application
-is a **directory** (`catalog/applications/<id>/app.conf`) so it can grow assets
-later; every application declares its `INSTALL_METHOD` (`brew`/`cask` are
-automated; `mas`/`pkg`/`dmg`/`manual` are honest manual steps, never failures); a
-package identifier exists in exactly **one** `app.conf` line, and you verify it
-against the real installation method (`brew info --formula/--cask`) before
-committing it; bundles reference application IDs; profiles reference bundle IDs
-and place themselves in the menu via `CATEGORY`/`SUBCATEGORY` — menus regenerate
-from data, never from code. `JB_PICK=true` without a `JB_PICK_NOTE` is invalid: a
-recommendation without its reasoning is just a favorite. Keep every file flat
-`KEY=value`, human-editable in any text editor — no YAML, no JSON, no SQLite. See
-[Deployment-Design.md](Deployment-Design.md) for the architecture.
+[Catalog-Format.md](Catalog-Format.md). Two layers only, as of v2.2: an
+application is a **directory** (`catalog/applications/<id>/app.conf`) so it
+can grow assets later; every application declares its `INSTALL_METHOD`
+(`brew`/`cask` are automated; `mas`/`pkg`/`dmg`/`manual` are honest manual
+steps, never failures); a package identifier exists in exactly **one**
+`app.conf` line, and you verify it against the real installation method
+(`brew info --formula/--cask`) before committing it; `CATEGORY` places the
+application in exactly **one** section of the Application Catalog browser
+(as of v2.2.1 — one app, one category, no duplicate entries; see
+[architecture/0007-catalog-consistency.md](architecture/0007-catalog-consistency.md))
+— purely presentational, no Deployment logic ever branches on a category
+name. A preset (one `[id]` section in `catalog/presets.conf`, one file for
+all of them as of v2.2.1) is **nothing more than** `NAME`/`DESCRIPTION`/
+`ORDER`/`APPS` — a flat list of application IDs. There is no bundle/profile
+grouping layer to keep in sync; menus regenerate from data, never from code.
+`JB_PICK=true` without a `JB_PICK_NOTE` is invalid: a recommendation without
+its reasoning is just a favorite. Keep every file flat `KEY=value`,
+human-editable in any text editor — no YAML, no JSON, no SQLite (applications
+and presets are both parsed with the same `awk`-based reader as `state.env`,
+presets.conf's `[id]` sections included; this is unrelated to the Storage
+Platform's `profile.env`, which *is* `source`d as bash — don't confuse the
+two formats). See
+[Deployment-Architecture.md](Deployment-Architecture.md) for the current
+pipeline and [architecture/0006-deployment-flattening.md](architecture/0006-deployment-flattening.md)
+for why bundles/profiles were removed; [Deployment-Design.md](Deployment-Design.md)
+is the pre-v2.2 design history.
 
 ## Testing expectations
 

@@ -8,8 +8,15 @@ data channel between them** (besides the exported session variables). It is a fl
 
 | Function | Behavior |
 |---|---|
-| `state_value KEY` | Awk lookup by exact key. Returns the value after the first `=`; prints `N/A` when the key or file is missing. Values may contain `=`. |
-| `write_state_values "K1=v1" "K2=v2" …` | Copies the current file to a temp file, removes each incoming key, appends the new pairs, then `mv`s the temp file over `state.env`. Update-in-place semantics: **unrelated keys are preserved.** |
+| `read_kv_value FILE KEY [DEFAULT]` | Awk lookup by exact key in an arbitrary flat `KEY=value` file. Returns the value after the first `=`; prints `DEFAULT` (default `N/A`) when the key or file is missing. Values may contain `=`. |
+| `write_kv_values FILE "K1=v1" "K2=v2" …` | Copies FILE to a temp file, removes each incoming key, appends the new pairs, then `mv`s the temp file over FILE. Update-in-place semantics: **unrelated keys are preserved.** |
+| `state_value KEY` | `read_kv_value "$STATE_FILE" KEY "N/A"` |
+| `write_state_values "K1=v1" "K2=v2" …` | `write_kv_values "$STATE_FILE" "$@"` |
+
+`state.env` is one consumer of the generic reader/writer; the Storage Management
+subsystem's per-volume `.jbtoolkit` metadata file (see
+[Storage-Architecture.md](Storage-Architecture.md)) is the other — same format,
+same parser, no duplicated awk.
 
 Design notes:
 
@@ -52,13 +59,20 @@ flowchart LR
 | `LAST_SESSION_LOG` | `init_session` | report | Basename of current session log |
 | `LAST_SYSTEM_SNAPSHOT` | `init_session` | report, report_pdf.py | Basename of current snapshot |
 | `LAST_PDF_REPORT` | report | — | Basename of last generated PDF |
-| `DEPLOYED_PROFILE` | deployment | report | Profile ID of the last executed deployment |
+| `DEPLOYED_PRESET` | deployment | report | Preset ID of the last executed deployment (`"custom"` if none) |
 | `LAST_DEPLOYMENT` | deployment | report | Timestamp of the last deployment execution |
 | `DEPLOYMENT_APPS_INSTALLED` | deployment | report | **Confirmed** newly-installed count (post-verification) |
 | `DEPLOYMENT_APPS_MANUAL` | deployment | report | Apps requiring a manual installation step (never counted as failures) |
 | `DEPLOYMENT_APPS_FAILED` | deployment | report | Apps that did not verify after installation, or were unavailable in Homebrew |
 | `LAST_DEPLOYMENT_PLAN` | deployment | — | Basename of the exported plan (`logs/deployment_plan_*.env`) |
 | `LAST_DEPLOYMENT_TRANSACTION` | deployment | future history/support | Basename of the execution record (`logs/deployment_txn_*.env`) |
+| `LAST_STORAGE_PLAN` | storage/plan.sh | — | **Full path** (not a basename — lives on the volume, not `$BASE_DIR/logs`) to the exported plan, `<volume>/.jbtoolkit/plans/*.env`; stale once the volume is unmounted, a known accepted limitation |
+| `LAST_STORAGE_TRANSACTION` | storage/transaction.sh | — | Full path to the execution record, `<volume>/.jbtoolkit/transactions/*.env`; same staleness caveat |
+| `LAST_STORAGE_MIGRATION` | storage/transaction.sh | — | Timestamp of the last Storage Platform migration |
+| `STORAGE_MIGRATION_PROFILE` | storage/transaction.sh | — | Profile ID used (`home`, `downloads`, …) |
+| `STORAGE_MIGRATION_VOLUME` | storage/transaction.sh | — | Mount point last used as a migration destination |
+| `STORAGE_MIGRATION_MB_COPIED` | storage/transaction.sh | — | Total MB selected and copied in the last migration |
+| `STORAGE_MIGRATION_ITEMS_DELETED` | storage/transaction.sh | — | Count of source folders removed after verified copy |
 
 ## Score baseline handoff
 
@@ -81,9 +95,18 @@ instance of the "never report what wasn't measured" principle.
 These globals coordinate within a single module run only:
 
 - Counters: `TOTAL_FREED_MB`, `FILES_REMOVED` (zeroed by `initialize_state`,
-  accumulated by cleanup functions and `move_apps_to_trash`).
+  accumulated by cleanup functions, `move_apps_to_trash`, and
+  `confirm_and_delete_verified_sources` — the latter only after a verified
+  migration copy, never on a bare copy).
 - Caches: `_BREW_LIST_*` / `_BREW_OUTDATED_*` (+ `_LOADED` flags),
-  `APP_METADATA_CACHE`, `LARGE_FILES_CACHE`, `HARDWARE_MODEL`/`HARDWARE_NAME`.
+  `APP_METADATA_CACHE`, `LARGE_FILES_CACHE`, `HARDWARE_MODEL`/`HARDWARE_NAME`,
+  `STORAGE_VOLUME_CACHE` / `STORAGE_SCAN_CACHE` / `STORAGE_PROFILE_REGISTRY`.
+- Contracts: `STORAGE_PLAN_*` (storage/plan.sh) and `STORAGE_TXN_*`
+  (storage/transaction.sh, including `STORAGE_TXN_UUID` and the lifecycle
+  `STORAGE_TXN_STATE`) — process-scoped mirrors of the exported
+  `<volume>/.jbtoolkit/plans/*.env` / `.jbtoolkit/transactions/*.env` files,
+  same pattern as Deployment's `PLAN_*` / `TXN_*`, except persisted onto the
+  volume itself rather than `$BASE_DIR/logs` — see Storage-Architecture.md.
 - Metric cache: `SYS_RAM_PCT`, `SYS_DISK_PCT`, `SYS_CPU_LOAD` — set by
   `calculate_health_score` so callers display exactly what was scored.
 - Session identity: `JB_SESSION_LOG`, `JB_SYSTEM_SNAPSHOT`, `JB_MODULE` — exported,

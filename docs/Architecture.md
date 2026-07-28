@@ -12,7 +12,7 @@ jb-ToolKit/
 ├── jb                      # Interactive launcher (entry point)
 ├── README.md               # User-facing documentation (Spanish)
 ├── docs/                   # Engineering documentation (this directory)
-├── catalog/                # Deployment data: applications/bundles/profiles (+ reserved vendors/)
+├── catalog/                # Deployment data: applications + presets (+ reserved vendors/)
 │                           #   The ONLY place software is defined (INSTALL_METHOD model)
 ├── logs/                   # Runtime artifacts: state.env, session logs, snapshots, PDFs
 └── core/
@@ -25,14 +25,13 @@ jb-ToolKit/
     ├── deployment.sh       # Module 5: workstation deployment (launcher option 4)
     ├── deployment/         # Deployment LIBRARY (see docs/Deployment-Architecture.md)
     │   │                   #   Sourced by deployment.sh AND bootstrap.sh — one
-    │   │                   #   catalog, one planner, one installer
-    │   ├── catalog.sh      # Catalog access, hierarchy queries, V1–V10 validator
+    │   │                   #   catalog, one selection model, one planner, one installer
+    │   ├── catalog.sh      # Catalog access, CATEGORY/preset queries, V1–V9 validator
     │   ├── doctor.sh       # Advisory maintainability diagnostics
-    │   ├── resolve.sh      # Bundles → apps with provenance, compatibility filter
-    │   ├── planner.sh      # Deployment Plan builder + export (PLAN_* contract)
-    │   ├── render.sh       # Presentation: summary/explain/tree/confirmation/result
-    │   ├── menu.sh         # Catalog-generated navigation, bundle review, hardware
-    │   │                   #   recommendations, Custom, JB Picks browser
+    │   ├── selection.sh    # SELECTED_APPS — the one selection model; compatibility checks
+    │   ├── planner.sh      # Installation Plan builder + export (PLAN_* contract)
+    │   ├── render.sh       # Presentation: summary/explain/diff-tree/confirmation/result
+    │   ├── menu.sh         # Quick Presets picker + Application Catalog browser
     │   ├── confirm.sh      # Confirmation loop; [I] executes the plan
     │   ├── transaction.sh  # Installation Transaction (execution record)
     │   └── install.sh      # Plan executor: pre-flight + per-app engine + verification
@@ -42,12 +41,22 @@ jb-ToolKit/
     │   ├── brew.sh         # Homebrew install / validate / base tools / updates
     │   ├── hardware.sh     # Hardware profile display, Rosetta detection
     │   └── wizard.sh       # Onboarding wizard: one question → Deployment pipeline
-    └── maintenance/        # Maintenance sub-modules
-        ├── cleanup.sh      # Cache / log / Trash / Homebrew cleanup
-        ├── storage.sh      # Large-file scan, cloud sync, LaunchAgents
-        ├── apps.sh         # App risk scoring and user-driven removal
-        ├── performance.sh  # Performance profiles (light / aggressive / restore)
-        └── state.sh        # Maintenance state lifecycle + executive summary
+    ├── maintenance/        # Maintenance sub-modules
+    │   ├── cleanup.sh      # Cache / log / Trash / Homebrew cleanup
+    │   ├── storage.sh      # Large-file scan, cloud sync, LaunchAgents
+    │   ├── apps.sh         # App risk scoring and user-driven removal
+    │   ├── performance.sh  # Performance profiles (light / aggressive / restore)
+    │   └── state.sh        # Maintenance state lifecycle + executive summary
+    └── platform/           # Platform layer — reusable services, own public APIs
+        └── storage/        # Storage Platform (see docs/Storage-Architecture.md)
+            │                 #   Sourced by maintenance.sh today; a shared library
+            │                 #   like deployment/*, not module-specific
+            ├── api.sh       # Public surface: storage::* functions only
+            ├── volume.sh    # Adopted Data Volume: eligibility, adoption, discovery
+            ├── plan.sh      # Storage Migration Plan (STORAGE_PLAN_* contract)
+            ├── transaction.sh # Storage Migration Transaction (STORAGE_TXN_* contract)
+            ├── engine.sh    # Generic pipeline + profile registry/loader
+            └── profiles/    # Migration profiles: profile.env + scan.sh per directory
 ```
 
 ## Subsystems
@@ -61,7 +70,8 @@ jb-ToolKit/
 | **Diagnostics** | `core/diagnostics.sh` | System summary, top processes, health score, state write |
 | **Maintenance** | `core/maintenance.sh` + `core/maintenance/*` | Preview-confirm-clean workflow, storage analysis, app cleanup, performance profiles, post-score |
 | **Reporting** | `core/report.sh`, `core/report_pdf.py` | Terminal executive report; optional PDF built from `state.env` + system snapshot |
-| **Deployment** | `core/deployment.sh` + `core/deployment/*` | Catalog-driven menus, bundle review, hardware recommendations, Deployment Planner, plan review, pre-flight validation, per-application execution and verification, Installation Transaction record (see [Deployment-Architecture.md](Deployment-Architecture.md)). The `core/deployment/*` files are a **library** also consumed by Bootstrap's wizard |
+| **Deployment** | `core/deployment.sh` + `core/deployment/*` | Quick Presets, the Application Catalog (one selection model, `SELECTED_APPS`), Installation Planner, plan review, pre-flight validation, per-application execution and verification, Installation Transaction record (see [Deployment-Architecture.md](Deployment-Architecture.md)). The `core/deployment/*` files are a **library** also consumed by Bootstrap's wizard |
+| **Storage Platform** | `core/platform/storage/*` | The first Platform service: Adopted Data Volumes, a generic scan/plan/execute/verify/rollback/commit pipeline, a public `storage::*` API, and pluggable migration profiles (see [Storage-Architecture.md](Storage-Architecture.md)). A **library**, sourced today by `maintenance.sh` |
 | **State** | `logs/state.env` | Key-value persistence across module processes and sessions |
 
 ## Module dependency graph
@@ -102,10 +112,12 @@ graph TD
     MAINT -->|source| PERF[maintenance/performance.sh]
     MAINT -->|source| MSTATE[maintenance/state.sh]
     MAINT -->|source| STOR[maintenance/storage.sh]
+    MAINT -->|source| SPLAT[platform/storage/ library:<br/>volume.sh, plan.sh, transaction.sh,<br/>engine.sh, api.sh, profiles/]
+    SPLAT -.->|writes/reads| VOLDATA[(external volume:<br/>.jbtoolkit/)]
 
     DEP -->|source| UTILS
     DEP -->|source| UI
-    DEP -->|source| DSUB[deployment/ library:<br/>catalog.sh, resolve.sh, planner.sh,<br/>render.sh, menu.sh, confirm.sh,<br/>transaction.sh, install.sh]
+    DEP -->|source| DSUB[deployment/ library:<br/>catalog.sh, selection.sh, planner.sh,<br/>render.sh, menu.sh, confirm.sh,<br/>transaction.sh, install.sh]
     DEP -.->|reads| CATDATA[(catalog/)]
 
     REP -->|python3| PDF[core/report_pdf.py]
@@ -119,14 +131,19 @@ Key property: **there are no dependencies between module orchestrators.** No mod
 runs, sources, or reads the internals of another module's *orchestrator*. They
 communicate exclusively through `logs/state.env` and the shared session log.
 
-Two subsystems are **shared function libraries**, not module internals, and may be
-sourced by any orchestrator (the `ui.sh` precedent, extended in v2.0.1):
+Three subsystems are **shared function libraries**, not module internals, and may
+be sourced by any orchestrator (the `ui.sh` precedent, extended since v2.0.1):
 
 - `core/bootstrap/ui.sh` — the UI layer for all modules.
-- `core/deployment/*.sh` — the Deployment library (catalog, resolver, planner,
-  renderer, menus, confirmation, transaction, installer). Sourced by
+- `core/deployment/*.sh` — the Deployment library (catalog, selection,
+  planner, renderer, menus, confirmation, transaction, installer). Sourced by
   `deployment.sh` and by `bootstrap.sh`, so the toolkit has exactly one catalog,
-  one planner, and one installer.
+  one selection model, one planner, and one installer.
+- `core/platform/storage/*.sh` — the Storage Platform service (volume adoption,
+  the migration pipeline, transactions, the `storage::*` public API, and
+  pluggable profiles). Sourced today only by `maintenance.sh`; a future
+  orchestrator sources the same files and calls `storage::run_profile` — no
+  module outside this directory should call anything but `storage::*`.
 
 ## Process model
 
@@ -153,7 +170,13 @@ The launcher runs each module with `bash "$script"` — a **child process**, not
 4. The `deployment/*` library is additionally shared: both `deployment.sh` and
    `bootstrap.sh` source it. It is the only place software selection, planning,
    and installation exist.
-5. Orchestrator scripts (`bootstrap.sh`, `maintenance.sh`, `diagnostics.sh`,
+5. `core/platform/storage/*` is a Platform service: everything outside it calls
+   `api.sh`'s `storage::*` functions, never `volume.sh`/`engine.sh` internals
+   or `.jbtoolkit/*.env` directly. It is the only place volume adoption and
+   migration logic exist — future Platform services (State, Metrics, Logging,
+   Report, Events, Config) would follow the same shape if and when they're
+   actually built (see [docs/architecture/](architecture/)).
+6. Orchestrator scripts (`bootstrap.sh`, `maintenance.sh`, `diagnostics.sh`,
    `report.sh`, `deployment.sh`) own control flow, ordering, and exit codes.
 
 ## Error-handling strategy

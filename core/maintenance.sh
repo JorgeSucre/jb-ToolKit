@@ -4,7 +4,7 @@ set -Euo pipefail
 START_TIME=$(date +%s)
 
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$BASE_DIR/core/utils.sh"
 # Session is owned by the jb launcher.
 # Only initialize a fallback session when run standalone (outside jb).
@@ -21,6 +21,17 @@ source "$BASE_DIR/core/maintenance/apps.sh"
 source "$BASE_DIR/core/maintenance/performance.sh"
 source "$BASE_DIR/core/maintenance/state.sh"
 source "$BASE_DIR/core/maintenance/storage.sh"
+
+# Storage Platform service (shared library — see docs/Storage-Architecture.md
+# and docs/architecture/0002-storage-platform.md). Only api.sh's storage::*
+# functions and run_storage_management are meant to be called from here on;
+# everything else is the service's own internals.
+source "$BASE_DIR/core/platform/storage/volume.sh"
+source "$BASE_DIR/core/platform/storage/plan.sh"
+source "$BASE_DIR/core/platform/storage/transaction.sh"
+source "$BASE_DIR/core/platform/storage/engine.sh"
+source "$BASE_DIR/core/platform/storage/api.sh"
+load_storage_profiles
 
 
 print_banner
@@ -70,6 +81,9 @@ fi
 
 session_write INFO "Running storage.sh"
 run_storage_analysis
+
+session_write INFO "Running storage::run_profile"
+storage::run_profile
 
 session_write INFO "Running apps.sh"
 run_apps_cleanup

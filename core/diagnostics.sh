@@ -2,7 +2,7 @@
 
 set -Eeo pipefail
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$BASE_DIR/core/utils.sh"
 # Session is owned by the jb launcher.
 # Only initialize a fallback session when run standalone (outside jb).
@@ -174,7 +174,7 @@ write_state_values \
     "LAST_DIAGNOSTIC=$(date +%Y-%m-%d_%H:%M:%S)" \
     "LAST_MODULE=diagnostics" \
     "ARCH=$(uname -m)" \
-    "JB_VERSION=0.9" \
+    "JB_VERSION=$JB_VERSION" \
     "CPU_LOAD=$SYS_CPU_LOAD" \
     "RAM_USED_PCT=$SYS_RAM_PCT" \
     "DISK_USED_PCT=$SYS_DISK_PCT"
