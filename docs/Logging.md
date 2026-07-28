@@ -16,7 +16,7 @@ flowchart TD
 ```
 
 - The launcher owns the session; `JB_SESSION_LOG` / `JB_SYSTEM_SNAPSHOT` are exported
-  so all four modules append to the **same** log.
+  so all five modules append to the **same** log.
 - Modules call `init_session` too, but it returns immediately when the inherited
   session exists — the call only matters when a module is run standalone, where it
   creates a fallback session so logging never silently disappears.
