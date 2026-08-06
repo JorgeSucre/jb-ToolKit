@@ -6,7 +6,7 @@
 BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export BASE_DIR
 export STATE_FILE="$BASE_DIR/logs/state.env"
-export JB_VERSION="${JB_VERSION:-2.2.2}"
+export JB_VERSION="${JB_VERSION:-2.4.1}"
 mkdir -p "$BASE_DIR/logs" 2>/dev/null || true
 
 # =========================
@@ -445,6 +445,19 @@ brew_available() {
 # Homebrew query cache
 # Session-level: each list/outdated query runs at most once per process.
 # Cache is populated lazily; skipped when brew is unavailable.
+#
+# The loader functions below (_brew_ensure_*) MUST be called as bare
+# statements, never through a pipe or $(...) — either one forks a subshell,
+# and a subshell's variable assignments (the cache itself) evaporate the
+# instant it exits. Every reader (brew_list_formula, brew_formula_installed,
+# etc.) calls its loader bare first, then reads the now-populated global
+# directly, so the mutation actually lands in the caller's shell. Getting
+# this wrong doesn't break any single call — grep still sees the right data
+# piped to it — it just means the "cache" silently never caches: every
+# lookup re-shells out to `brew list`/`brew outdated`, once per package,
+# which both defeats the point of caching and multiplies the number of
+# independent Homebrew invocations an already-installed package has to
+# survive without one of them hiccupping.
 # =========================
 _BREW_LIST_FORMULA=""
 _BREW_LIST_CASK=""
@@ -457,56 +470,77 @@ _BREW_OUTDATED_CASK_LOADED=0
 
 # A transient brew failure must not poison the session: the cache is only
 # marked loaded when the query succeeded, so the next call retries.
-brew_list_formula() {
-    if [[ "$_BREW_LIST_FORMULA_LOADED" -eq 0 ]] && brew_available; then
-        if _BREW_LIST_FORMULA=$(brew list --formula 2>/dev/null); then
-            _BREW_LIST_FORMULA_LOADED=1
-        else
-            _BREW_LIST_FORMULA=""
-        fi
+_brew_ensure_list_formula() {
+    [[ "$_BREW_LIST_FORMULA_LOADED" -eq 0 ]] || return 0
+    brew_available || return 0
+    if _BREW_LIST_FORMULA=$(brew list --formula 2>/dev/null); then
+        _BREW_LIST_FORMULA_LOADED=1
+    else
+        _BREW_LIST_FORMULA=""
     fi
+}
+
+_brew_ensure_list_cask() {
+    [[ "$_BREW_LIST_CASK_LOADED" -eq 0 ]] || return 0
+    brew_available || return 0
+    if _BREW_LIST_CASK=$(brew list --cask 2>/dev/null); then
+        _BREW_LIST_CASK_LOADED=1
+    else
+        _BREW_LIST_CASK=""
+    fi
+}
+
+_brew_ensure_outdated_formula() {
+    [[ "$_BREW_OUTDATED_FORMULA_LOADED" -eq 0 ]] || return 0
+    brew_available || return 0
+    if _BREW_OUTDATED_FORMULA=$(brew outdated --formula 2>/dev/null); then
+        _BREW_OUTDATED_FORMULA_LOADED=1
+    else
+        _BREW_OUTDATED_FORMULA=""
+    fi
+}
+
+_brew_ensure_outdated_cask() {
+    [[ "$_BREW_OUTDATED_CASK_LOADED" -eq 0 ]] || return 0
+    brew_available || return 0
+    if _BREW_OUTDATED_CASK=$(brew outdated --cask 2>/dev/null); then
+        _BREW_OUTDATED_CASK_LOADED=1
+    else
+        _BREW_OUTDATED_CASK=""
+    fi
+}
+
+brew_list_formula() {
+    _brew_ensure_list_formula
     printf "%s\n" "$_BREW_LIST_FORMULA"
 }
 
 brew_list_cask() {
-    if [[ "$_BREW_LIST_CASK_LOADED" -eq 0 ]] && brew_available; then
-        if _BREW_LIST_CASK=$(brew list --cask 2>/dev/null); then
-            _BREW_LIST_CASK_LOADED=1
-        else
-            _BREW_LIST_CASK=""
-        fi
-    fi
+    _brew_ensure_list_cask
     printf "%s\n" "$_BREW_LIST_CASK"
 }
 
 brew_outdated_formula() {
-    if [[ "$_BREW_OUTDATED_FORMULA_LOADED" -eq 0 ]] && brew_available; then
-        if _BREW_OUTDATED_FORMULA=$(brew outdated --formula 2>/dev/null); then
-            _BREW_OUTDATED_FORMULA_LOADED=1
-        else
-            _BREW_OUTDATED_FORMULA=""
-        fi
-    fi
+    _brew_ensure_outdated_formula
     printf "%s\n" "$_BREW_OUTDATED_FORMULA"
 }
 
 brew_outdated_cask() {
-    if [[ "$_BREW_OUTDATED_CASK_LOADED" -eq 0 ]] && brew_available; then
-        if _BREW_OUTDATED_CASK=$(brew outdated --cask 2>/dev/null); then
-            _BREW_OUTDATED_CASK_LOADED=1
-        else
-            _BREW_OUTDATED_CASK=""
-        fi
-    fi
+    _brew_ensure_outdated_cask
     printf "%s\n" "$_BREW_OUTDATED_CASK"
 }
 
+# grep against the cached variable directly (a here-string, not a pipe) so
+# checking one package's status can never itself be the thing that discards
+# the cache — see the block comment above.
 brew_formula_installed() {
-    brew_list_formula | grep -qx "$1"
+    _brew_ensure_list_formula
+    grep -qx "$1" <<< "$_BREW_LIST_FORMULA"
 }
 
 brew_cask_installed() {
-    brew_list_cask | grep -qx "$1"
+    _brew_ensure_list_cask
+    grep -qx "$1" <<< "$_BREW_LIST_CASK"
 }
 
 brew_upgrade_package() {

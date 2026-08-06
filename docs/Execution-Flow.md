@@ -111,16 +111,13 @@ for why this replaced the earlier Profiles→Bundles→Applications hierarchy.
 
 ```mermaid
 flowchart TD
-    A[Validate catalog V1–V9<br/>invalid = abort, name the files] --> B[Quick Presets: flat list from data<br/>+ Empezar vacío, 0 nesting]
-    B -->|preset or empty| LOAD[load_preset_into_selection<br/>or reset_selection<br/>incompatible apps recorded, never silent]
-    LOAD --> HWFOLD[apply_hardware_recommendations:<br/>HW_RECOMMEND ∩ this machine,<br/>not yet installed, folded into the SAME selection]
-    HWFOLD --> CAT[Application Catalog:<br/>one continuous list grouped by CATEGORY,<br/>toggle add/remove, JB_PICK apps marked ⭐ inline,<br/>incompatible apps shown ⛔ not selectable]
-    CAT -->|0| CANC0[Selection cancelled] --> B
+    A[Validate catalog V1–V12<br/>invalid = abort, name the files] --> CAT[Application Catalog: THE entry point<br/>responsive 1–3 column grid by CATEGORY,<br/>toggle add/remove · ✔ installed · ⭐ JB Pick ·<br/>★ recommended (advisory, never pre-checked),<br/>incompatible apps shown ⛔ not selectable,<br/>no interactive preset loading (v2.4.1)]
+    CAT -->|0| CANC0[Selection cancelled] --> CAT
     CAT -->|Enter| E[Planner: build_plan_from_selection —<br/>classifies SELECTED_APPS into<br/>automatic track, manual track, named JB Picks]
-    E --> H[Confirmation screen: preset,<br/>automatic/manual/pick/compat-exclusion counts]
-    H -->|E| X[Explain view: provenance,<br/>manual steps + URLs, reasons] --> H
-    H -->|G| T[Diff view: preset vs. final selection<br/>kept / added / removed] --> H
-    H -->|0| B
+    E --> H[Confirmation screen: will-install /<br/>already-installed / manual / picks /<br/>recommended-but-skipped / compat-exclusion counts]
+    H -->|E| X[Explain view: provenance,<br/>manual steps + URLs, reasons,<br/>recommended-but-unselected] --> H
+    H -->|G| T[Diff view: preset vs. final selection<br/>kept / added / removed<br/>only meaningful if a preset was loaded] --> H
+    H -->|0| CAT
     H -->|I| GATE{ask_yes_no:<br/>¿Preparar este equipo?}
     GATE -->|no| CANC[Cancelled transaction recorded] --> H
     GATE -->|yes| EXPORT[Export plan → logs/] --> PART[Partition: already installed<br/>brew query / Applications check]
@@ -131,7 +128,7 @@ flowchart TD
     PRE -->|all available| ENG[Engine PER APP:<br/>retry 3 5 brew install / --cask]
     ENG --> VERIFY[brew_cache_reset →<br/>per-app verification]
     VERIFY --> DONE[Transaction + state.env +<br/>result screen: named outcomes]
-    DONE --> URLS[Offer download page<br/>per manual app] --> B
+    DONE --> URLS[Offer download page<br/>per manual app] --> CAT
 ```
 
 The planner is the only decision-maker past selection; the installer executes

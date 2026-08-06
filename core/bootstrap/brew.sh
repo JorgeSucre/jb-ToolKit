@@ -182,6 +182,15 @@ update_brew_indexes() {
 
 # Base CLI tools the toolkit itself depends on (Diagnostics and Report use
 # fastfetch). Installed through the engine pattern and verified afterward.
+#
+# `brew install` on an already-installed formula is a no-op that still
+# exits 0 (just a "already installed and up-to-date" warning) — Homebrew's
+# own exit code is authoritative proof the formula is present, fresh
+# install or not, and is trusted first. The query-based re-check only runs
+# as a fallback when the command itself reported an error, since some
+# install-time errors are cosmetic and the formula ends up present anyway;
+# it must never be the ONLY thing standing between "Homebrew says it
+# worked" and Bootstrap aborting.
 ensure_base_tools() {
 
     if brew_formula_installed "fastfetch"; then
@@ -191,10 +200,13 @@ ensure_base_tools() {
 
     log "📦 Instalando fastfetch (herramienta base del toolkit)..."
 
-    if ! HOMEBREW_NO_ENV_HINTS=1 retry 3 5 run_cmd --visible brew install fastfetch; then
-        warn "⚠️ La instalación de fastfetch reportó errores"
+    if HOMEBREW_NO_ENV_HINTS=1 retry 3 5 run_cmd --visible brew install fastfetch; then
+        success "✔ fastfetch instalado y verificado"
+        brew_cache_reset
+        return 0
     fi
 
+    warn "⚠️ La instalación de fastfetch reportó errores; verificando si quedó instalada"
     brew_cache_reset
 
     if brew_formula_installed "fastfetch"; then

@@ -58,9 +58,11 @@ count with a fresh outdated query).
 `run_onboarding_wizard` — Bootstrap's software step. Validates the catalog, asks
 one question ("¿Cómo se usará este Mac?") as a flat list generated from
 `list_presets_ordered` (no category nesting), and dispatches into
-`start_deployment_flow` — the **same** function the Deployment menu's preset
-picker calls. Owns no software selection logic; ends when a deployment
-executes or the technician skips.
+`start_deployment_flow` — the **same** function the standalone Deployment
+module calls (as of v2.4.0 with an empty selection by default; the wizard is
+the only caller that still picks a preset before entering the catalog). Owns
+no software selection logic; ends when a deployment executes or the
+technician skips.
 
 ### `core/bootstrap/hardware.sh`
 `detect_rosetta` (filesystem check, `pkgutil` fallback; Apple Silicon only),
@@ -249,7 +251,7 @@ Application Catalog's browsing queries (`list_app_categories` /
 `apps_in_category` — every application's single `CATEGORY` value, alphabetical,
 one app per section by construction),
 `apps_recommended_for_hardware` (`HW_RECOMMEND` matching), and
-`validate_catalog` implementing rules V1–V9 (including the `INSTALL_METHOD`
+`validate_catalog` implementing rules V1–V12 (including the `INSTALL_METHOD`
 contract) with per-file, per-rule Spanish messages. `JB_CATALOG_DIR` overrides
 the catalog root (testing).
 
@@ -300,26 +302,39 @@ renderers: `render_plan_summary` (concise), `render_plan` (explain: provenance
 `render_plan_tree` (**preset-vs-final-selection diff** — kept/added/removed,
 computed at render time from `PLAN_APPS`/`PLAN_MANUAL` against a fresh
 `preset_apps()` lookup, no stored diff data; a no-op when `PLAN_PRESET_ID` is
-`"custom"`), `render_confirmation` (pre-install summary: automatic vs manual
-vs compatibility-excluded counts), `render_transaction` (verified result:
-every outcome named — installed, already installed, manual, compatibility
-excluded, failed with reasons).
+`"custom"`), `render_confirmation` (pre-install summary: four counts
+computed fresh at render time — will-install, already-installed,
+recommended-but-skipped, and compatibility-excluded — rendered glyph-led as
+of v2.4.1, reusing the catalog's own ✔/⭐/★/✋ vocabulary instead of label
+text), `render_transaction` (verified result: every outcome named —
+installed, already installed, manual, compatibility excluded, failed with
+reasons).
 
 ### `core/deployment/menu.sh`
-One workflow: Quick Presets → Application Catalog → confirmation (`confirm.sh`).
+Application Catalog (the entry point itself) → confirmation (`confirm.sh`).
+As of v2.4.1 there is no interactive way to load a preset anywhere in this
+file — real-world use showed technicians always ended up hand-picking from
+the catalog regardless — see
+[architecture/0012-terminal-ui-refinement.md](architecture/0012-terminal-ui-refinement.md).
 Navigation generated entirely from catalog data — no hardcoded names.
-`run_deployment_menu` (flat list: every preset by `list_presets_ordered` +
-Empezar vacío, no category nesting), `start_deployment_flow` (loads a
-preset or resets to empty, folds hardware recommendations, runs the Application
-Catalog, builds the plan, hands off to confirmation — the **same** function
-`wizard.sh` calls), `run_application_catalog` (the one screen selection
-happens in: a single continuous list grouped by `CATEGORY` with running
-selection numbers so `parse_selection`'s `1,3-5` syntax works across category
-boundaries; `JB_PICK=true` applications are marked `⭐` inline, regardless of
-selection state; an incompatible app is shown with its reason instead of a
-checkbox and is never assigned a number — add/remove/toggle without leaving
-the screen, Enter to continue, `0` to cancel). There is no separate JB Picks
-screen — see
+`run_deployment_menu` (a thin forward into `start_deployment_flow ""`),
+`start_deployment_flow` (loads a preset or resets to empty, runs the
+Application Catalog, builds the plan, hands off to confirmation — the
+**same** function `wizard.sh` calls, which still picks a preset up front for
+its own onboarding question — the parameter exists for that caller alone
+now), `run_application_catalog` (the one screen selection happens in: a
+responsive 1–3 column grid — `_catalog_terminal_columns` reads `tput cols`
+on every render — grouped by `CATEGORY`, sorted JB Picks first then
+hardware-recommended then alphabetical within each tier; running selection
+numbers, row-major across columns, so `parse_selection`'s `1,3-5` syntax
+works across column and category boundaries; `✔` marks an already-installed
+app and `★` marks a hardware recommendation, both in fixed-width badge
+slots regardless of selection state — hardware recommendations are
+advisory-only, never auto-selected; an incompatible app is shown full-width
+with its reason instead of a grid cell and is never assigned a number —
+add/remove/toggle without leaving the screen, `/text` search, `p`/`h`
+filters, `d<n>` detail view, Enter to continue, `0` to cancel). There is no
+separate JB Picks screen — see
 [architecture/0008-integration-hardening.md](architecture/0008-integration-hardening.md).
 
 ### `core/deployment/confirm.sh`

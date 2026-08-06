@@ -89,7 +89,7 @@ _plan_add_app() {
 
     case "$method" in
         brew|cask)
-            PLAN_APPS+="$app|$app_name|$provenance|$method|$(app_field "$app" PACKAGE)"$'\n'
+            PLAN_APPS+="$app|$app_name|$provenance|$method|$(app_field "$app" PACKAGE_NAME)"$'\n'
             PLAN_APP_COUNT=$((PLAN_APP_COUNT + 1))
             ;;
         *)

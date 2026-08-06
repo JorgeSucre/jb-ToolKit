@@ -26,12 +26,14 @@ jb-ToolKit/
     ├── deployment/         # Deployment LIBRARY (see docs/Deployment-Architecture.md)
     │   │                   #   Sourced by deployment.sh AND bootstrap.sh — one
     │   │                   #   catalog, one selection model, one planner, one installer
-    │   ├── catalog.sh      # Catalog access, CATEGORY/preset queries, V1–V9 validator
+    │   ├── catalog.sh      # Catalog access, CATEGORY/preset queries, V1–V12 validator
     │   ├── doctor.sh       # Advisory maintainability diagnostics
-    │   ├── selection.sh    # SELECTED_APPS — the one selection model; compatibility checks
+    │   ├── selection.sh    # SELECTED_APPS — the one selection model; compatibility +
+    │   │                   #   already-installed checks
     │   ├── planner.sh      # Installation Plan builder + export (PLAN_* contract)
     │   ├── render.sh       # Presentation: summary/explain/diff-tree/confirmation/result
-    │   ├── menu.sh         # Quick Presets picker + Application Catalog browser
+    │   ├── menu.sh         # Application Catalog browser (the entry point; responsive
+    │   │                   #   1-3 column grid; no preset picker, no interactive loader)
     │   ├── confirm.sh      # Confirmation loop; [I] executes the plan
     │   ├── transaction.sh  # Installation Transaction (execution record)
     │   └── install.sh      # Plan executor: pre-flight + per-app engine + verification
@@ -70,7 +72,7 @@ jb-ToolKit/
 | **Diagnostics** | `core/diagnostics.sh` | System summary, top processes, health score, state write |
 | **Maintenance** | `core/maintenance.sh` + `core/maintenance/*` | Preview-confirm-clean workflow, storage analysis, app cleanup, performance profiles, post-score |
 | **Reporting** | `core/report.sh`, `core/report_pdf.py` | Terminal executive report; optional PDF built from `state.env` + system snapshot |
-| **Deployment** | `core/deployment.sh` + `core/deployment/*` | Quick Presets, the Application Catalog (one selection model, `SELECTED_APPS`), Installation Planner, plan review, pre-flight validation, per-application execution and verification, Installation Transaction record (see [Deployment-Architecture.md](Deployment-Architecture.md)). The `core/deployment/*` files are a **library** also consumed by Bootstrap's wizard |
+| **Deployment** | `core/deployment.sh` + `core/deployment/*` | The Application Catalog (the entry point; a responsive grid, one selection model, `SELECTED_APPS`; presets aren't exposed in this interactive UI at all — see below), Installation Planner, plan review, pre-flight validation, per-application execution and verification, Installation Transaction record (see [Deployment-Architecture.md](Deployment-Architecture.md)). The `core/deployment/*` files are a **library** also consumed by Bootstrap's wizard, which still uses presets for its own onboarding question |
 | **Storage Platform** | `core/platform/storage/*` | The first Platform service: Adopted Data Volumes, a generic scan/plan/execute/verify/rollback/commit pipeline, a public `storage::*` API, and pluggable migration profiles (see [Storage-Architecture.md](Storage-Architecture.md)). A **library**, sourced today by `maintenance.sh` |
 | **State** | `logs/state.env` | Key-value persistence across module processes and sessions |
 

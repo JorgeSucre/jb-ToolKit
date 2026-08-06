@@ -46,6 +46,14 @@ tags) and every preset lives as one `[id]` section inside a single
 purely to remove duplication and drift — see
 [architecture/0007-catalog-consistency.md](architecture/0007-catalog-consistency.md).
 
+As of v2.3.0, the catalog carries **rich metadata** — homepage, license,
+architecture, and more — for every application, and the philosophy behind
+that expansion is written down on its own:
+[CATALOG_CONSTITUTION.md](CATALOG_CONSTITUTION.md) (the long-term
+principles) and [CATALOG_STANDARD.md](CATALOG_STANDARD.md) (the exact
+schema). This document stays the normative parsing/validation reference;
+those two are the *why* and the *what*, respectively.
+
 ## Layer 1 — Applications
 
 **Location:** `catalog/applications/<id>/app.conf`
@@ -58,26 +66,40 @@ name** and read `<dir>/app.conf` — never glob for conf files across the tree.
 
 ### Fields
 
+Full field-by-field contract lives in
+[CATALOG_STANDARD.md](CATALOG_STANDARD.md); summarized here for the parser's
+sake:
+
 | Field | Required | Contract |
 |---|---|---|
-| `ID` | yes | Must equal the directory name exactly |
-| `NAME` | yes | Display name, shown verbatim in the UI |
-| `INSTALL_METHOD` | yes | `brew` \| `cask` \| `mas` \| `pkg` \| `dmg` \| `manual`. See "Installation methods" below |
-| `PACKAGE` | iff method is `brew`/`cask`/`mas` | The package identifier: Homebrew formula name, cask token, or Mac App Store numeric ID |
-| `DOWNLOAD_URL` | iff method is `manual`/`pkg`/`dmg` | Where the technician obtains the app. Optional for other methods |
+| `APP_ID` | yes | Must equal the directory name exactly (renamed from `ID` in v2.3.0) |
+| `NAME` | yes | The application's official name, shown verbatim in the UI |
+| `CATEGORY` | yes | Exactly one lowercase tag, one of `ai`, `browsers`, `cloud`, `communication`, `creative`, `development`, `device-management`, `media`, `networking`, `printers-scanners`, `productivity`, `security`, `system` (the validator rejects anything else — see V6). **Live, consumed data**: drives which single section of the Application Catalog browser the app appears in. Purely presentational — no Deployment logic branches on a category name, and changing an app's `CATEGORY` never changes installation behavior |
 | `DESCRIPTION` | yes | One line, Spanish |
-| `CATEGORY` | yes | Exactly one lowercase tag, one of `browsers`, `communication`, `creative`, `development`, `hardware`, `networking`, `productivity`, `utilities` (the validator rejects anything else — see V6). **Live, consumed data**: drives which single section of the Application Catalog browser the app appears in. Purely presentational — no Deployment logic branches on a category name, and changing an app's `CATEGORY` never changes installation behavior (see the ADR) |
+| `HOMEPAGE` | yes (v2.3.0) | The application's official homepage URL — metadata only, no consumer in Deployment today |
+| `LICENSE` | yes (v2.3.0) | Free text: an SPDX identifier where a specific license applies, else `Free`/`Freemium`/`Proprietary`/`Open Source` — see CATALOG_STANDARD.md |
+| `INSTALL_METHOD` | yes | `brew` \| `cask` \| `mas` \| `pkg` \| `dmg` \| `manual`. See "Installation methods" below |
+| `PACKAGE_NAME` | iff method is `brew`/`cask`/`mas` | The package identifier: Homebrew formula name, cask token, or Mac App Store numeric ID (renamed from `PACKAGE` in v2.3.0) |
+| `PACKAGE_TYPE` | yes (v2.3.0) | `formula` \| `cask` \| `app-store` \| `installer` \| `manual` — must agree with `INSTALL_METHOD` (V10); metadata only, does not drive installer behavior |
+| `ARCHITECTURE` | yes (v2.3.0) | `universal` \| `arm64` \| `intel` — a **descriptive** field for humans/future features. Not the compatibility filter — see `ARCHS` below |
+| `DOWNLOAD_URL` | iff method is `manual`/`pkg`/`dmg` | Where the technician obtains the app. Optional for other methods |
 | `JB_PICK` | no | `true` or absent. Any other value is invalid |
 | `JB_PICK_NOTE` | required iff `JB_PICK=true` | The reasoning behind the recommendation, Spanish. **A pick without a non-empty note is invalid** |
-| `ARCHS` | no | Space-separated `uname -m` values (`arm64`, `x86_64`). Absent = all architectures |
+| `ARCHS` | no | Space-separated `uname -m` values (`arm64`, `x86_64`). Absent = all architectures. **This**, not `ARCHITECTURE`, is what `app_incompatibility_reason` actually filters on |
 | `MIN_MACOS` | no | Minimum macOS **major** version (integer, e.g. `12`). Absent = any supported macOS |
-| `HW_RECOMMEND` | no | Space-separated machine families this app is recommended for: `macbook_air`, `macbook_pro`, `mac_mini`, `mac_studio`, `imac`, plus the pseudo-family `external_display`. Apps carrying this field are pre-checked and annotated in the Application Catalog when the detected hardware matches, and are exempt from the doctor's "unreferenced" advisory |
+| `HW_RECOMMEND` | no | Space-separated machine families this app is recommended for: `macbook_air`, `macbook_pro`, `mac_mini`, `mac_studio`, `imac`, plus the pseudo-family `external_display`. Apps carrying this field are annotated (★) in the Application Catalog when the detected hardware matches — advisory only as of v2.4.0, never pre-checked — and are exempt from the doctor's "unreferenced" advisory |
+| `ALTERNATIVES` | no (v2.3.0) | Free text: comparable tools. Never validated against the catalog — may legitimately name software this catalog doesn't carry |
+| `RELATED` | no (v2.3.2) | Space-separated application IDs: companion tools typically used alongside this one (not substitutes — see `ALTERNATIVES`). Same shape as a preset's `APPS`; every ID must resolve to a real application (V12) |
+| `NOTES` | no (v2.3.0) | Free text, Spanish: caveats that don't fit elsewhere |
+| `WEBSITE` | no (v2.3.0) | A secondary link, only when meaningfully different from `HOMEPAGE` |
+| `REQUIREMENTS` | no (v2.3.0) | Free text, Spanish: human-readable requirements `ARCHS`/`MIN_MACOS` can't express |
 
-The `PACKAGE` line is the **single place in the repository** where a package
+The `PACKAGE_NAME` line is the **single place in the repository** where a package
 identifier may appear for deployment purposes (unique per method — the brew, cask,
 and mas namespaces are independent). Presets must never contain package names. The
-legacy v2.0.0 keys `BREW=` and `CASK=` are **invalid**; the validator rejects them
-so a leftover line can never become a silent no-op.
+legacy v2.0.0 keys `BREW=`/`CASK=`, and the pre-v2.3.0 keys `ID=`/`PACKAGE=`, are
+**invalid**; the validator rejects them so a leftover line can never become a
+silent no-op.
 
 **Removed in v2.2: `RECOMMENDED`.** It validated (`true`/absent) but had zero
 consumers anywhere in the codebase — a second, weaker "this is good" flag
@@ -88,14 +110,14 @@ carry `RECOMMENDED=true`.
 
 ### Installation methods
 
-| Method | Automated? | Carrier field | Behavior |
-|---|---|---|---|
-| `brew` | yes | `PACKAGE` (formula) | Installed by the engine (`brew install`) and verified per app |
-| `cask` | yes | `PACKAGE` (cask token) | Installed by the engine (`brew install --cask`) and verified per app |
-| `mas` | not yet | `PACKAGE` (App Store ID) | Manual track: reported as "instalar desde App Store" |
-| `pkg` | not yet | `DOWNLOAD_URL` | Manual track: reported as a manual step, download page offered |
-| `dmg` | not yet | `DOWNLOAD_URL` | Manual track: reported as a manual step, download page offered |
-| `manual` | no | `DOWNLOAD_URL` | Manual track: reported as a manual step, download page offered |
+| Method | Automated? | Carrier field | `PACKAGE_TYPE` | Behavior |
+|---|---|---|---|---|
+| `brew` | yes | `PACKAGE_NAME` (formula) | `formula` | Installed by the engine (`brew install`) and verified per app |
+| `cask` | yes | `PACKAGE_NAME` (cask token) | `cask` | Installed by the engine (`brew install --cask`) and verified per app |
+| `mas` | not yet | `PACKAGE_NAME` (App Store ID) | `app-store` | Manual track: reported as "instalar desde App Store" |
+| `pkg` | not yet | `DOWNLOAD_URL` | `installer` | Manual track: reported as a manual step, download page offered |
+| `dmg` | not yet | `DOWNLOAD_URL` | `installer` | Manual track: reported as a manual step, download page offered |
+| `manual` | no | `DOWNLOAD_URL` | `manual` | Manual track: reported as a manual step, download page offered |
 
 Applications on the **manual track** are first-class catalog members: they appear
 in presets, JB Picks, plans, and reports. They are **never** deployment
@@ -108,24 +130,32 @@ installed (verified by existence).
 
 ```bash
 # catalog/applications/keka/app.conf
-ID=keka
+APP_ID=keka
 NAME=Keka
-INSTALL_METHOD=cask
-PACKAGE=keka
+CATEGORY=system
 DESCRIPTION=Compresor y descompresor moderno y sin publicidad
-CATEGORY=utilities
+HOMEPAGE=https://www.keka.io/
+LICENSE=GPL-3.0-only
+INSTALL_METHOD=cask
+PACKAGE_NAME=keka
+PACKAGE_TYPE=cask
+ARCHITECTURE=universal
 JB_PICK=true
 JB_PICK_NOTE=Reemplazo moderno de The Unarchiver. Años de uso sin incidencias en equipos de clientes.
 ```
 
 ```bash
 # catalog/applications/pdfgear/app.conf — not available through Homebrew
-ID=pdfgear
+APP_ID=pdfgear
 NAME=PDFgear
+CATEGORY=productivity
+DESCRIPTION=Editor PDF gratuito y completo
+HOMEPAGE=https://www.pdfgear.com/
+LICENSE=Free
 INSTALL_METHOD=manual
 DOWNLOAD_URL=https://www.pdfgear.com/
-DESCRIPTION=Editor PDF gratuito y completo
-CATEGORY=productivity
+PACKAGE_TYPE=manual
+ARCHITECTURE=universal
 JB_PICK=true
 JB_PICK_NOTE=Cubre la mayoría de casos de edición PDF sin licencia de Acrobat. Ahorro real para clientes.
 ```
@@ -159,9 +189,9 @@ sections are purely for readability and carry no meaning.
 
 | Field | Required | Contract |
 |---|---|---|
-| `NAME` | yes | Display name shown in the Quick Presets screen and on plan/result screens |
+| `NAME` | yes | Display name shown wherever a preset is listed — the wizard's onboarding question, the CLI's usage help, and plan/result screens |
 | `DESCRIPTION` | yes | One line, Spanish |
-| `ORDER` | no | Integer sort key in the flat Quick Presets list. Default `50`; ties break alphabetically |
+| `ORDER` | no | Integer sort key in the flat preset list. Default `50`; ties break alphabetically |
 | `APPS` | yes | Space-separated application IDs — **the entire preset**. No nested references, no groups, no installation logic |
 
 A preset references **application IDs only** — never package names, never
@@ -179,12 +209,28 @@ ORDER=50
 APPS=appcleaner keka rectangle stats pdfgear openlogi git visual-studio-code node pnpm docker codex antigravity
 ```
 
-### Quick Presets screen
+### Loading a preset
 
-The opening Deployment screen lists every preset flat (ordered by `ORDER`, ties
-alphabetical), plus one fixed synthetic entry that is **not** a catalog file:
-**Empezar vacío (Start Empty)** — no preset loaded; the technician lands in
-the Application Catalog with an empty selection.
+As of v2.4.1, presets are not reachable anywhere in the standalone
+Deployment module's interactive UI — it opens straight into the Application
+Catalog with an empty selection and has no command to load one. This
+followed v2.4.0's earlier change (a preset-picker screen removed in favor of
+an in-catalog `l` command) once real-world use showed technicians always
+ended up hand-picking from the catalog regardless, making the loader itself
+one more concept without enough payoff to justify — see
+[architecture/0012-terminal-ui-refinement.md](architecture/0012-terminal-ui-refinement.md).
+The `APPS`/`NAME`/`DESCRIPTION`/`ORDER` format above is completely
+unaffected — presets remain fully real data, just not interactively loaded
+from this one screen.
+
+Two places still load a preset exactly as `load_preset_into_selection`
+always worked: **Bootstrap's onboarding wizard**
+(`core/bootstrap/wizard.sh`) shows its own flat preset list, including a
+synthetic "Empezar vacío" entry, as its first-run "how will this Mac be
+used?" question — a different screen for a different reason, deliberately
+untouched by either v2.4.0 or v2.4.1. And the **CLI** — `deployment.sh
+--resolve/--explain/--tree/--plan <preset>` — takes a preset name directly,
+unaffected by any interactive-UI change.
 
 `JB_PICK=true` applications are **not** a separate menu entry or screen. As
 of v2.2.2, a pick is annotated inline (`⭐`) wherever it appears in the
@@ -235,9 +281,12 @@ flowchart LR
   shown, never silent.
 - From that point forward, **preset-sourced and manually-added applications are
   indistinguishable in representation** — both are just members of Selected
-  Applications, tagged only for *display* provenance (`preset:<id>` / `manual`
-  / `hardware`). There is exactly one code path from "Selected Applications" to
-  "Installation Plan," regardless of how each app got there.
+  Applications, tagged only for *display* provenance (`preset:<id>` / `manual`).
+  There is exactly one code path from "Selected Applications" to "Installation
+  Plan," regardless of how each app got there. `HW_RECOMMEND` matches never add
+  themselves to Selected Applications (v2.4.0) — they are advisory-only, shown
+  as a ★ badge in the Application Catalog, so there is no third provenance
+  value for them.
 - The planner splits Selected Applications by `INSTALL_METHOD`: `brew`/`cask`
   records go to the automatic install list, everything else to the manual-step
   list.
@@ -249,15 +298,18 @@ complete rule set:
 
 | # | Rule |
 |---|---|
-| V1 | `ID` equals its directory name (applications) / `[id]` section header is valid kebab-case (presets) — checked against **every** `[...]` header found in `presets.conf`, not just the well-formed ones, so a malformed header (stray capital, a space, a typo) is reported instead of silently invisible to every listing |
-| V2 | All required fields present and non-empty |
-| V3 | `INSTALL_METHOD` present and ∈ {`brew`, `cask`, `mas`, `pkg`, `dmg`, `manual`}; `PACKAGE` present for `brew`/`cask`/`mas`; `DOWNLOAD_URL` present for `manual`/`pkg`/`dmg`; legacy `BREW`/`CASK` keys rejected |
+| V1 | `APP_ID` equals its directory name (applications) / `[id]` section header is valid kebab-case (presets) — checked against **every** `[...]` header found in `presets.conf`, not just the well-formed ones, so a malformed header (stray capital, a space, a typo) is reported instead of silently invisible to every listing |
+| V2 | All required fields present and non-empty (as of v2.3.0: `APP_ID`, `NAME`, `CATEGORY`, `DESCRIPTION`, `HOMEPAGE`, `LICENSE`, `INSTALL_METHOD`, `PACKAGE_TYPE`, `ARCHITECTURE`, plus `PACKAGE_NAME` where applicable) |
+| V3 | `INSTALL_METHOD` present and ∈ {`brew`, `cask`, `mas`, `pkg`, `dmg`, `manual`}; `PACKAGE_NAME` present for `brew`/`cask`/`mas`; `DOWNLOAD_URL` present for `manual`/`pkg`/`dmg`; legacy `BREW`/`CASK` keys rejected; legacy pre-v2.3.0 `ID`/`PACKAGE` keys rejected |
 | V4 | `JB_PICK` is `true` when present |
 | V5 | `JB_PICK=true` requires a non-empty `JB_PICK_NOTE` |
-| V6 | `ARCHS` values ∈ {`arm64`, `x86_64`}; `MIN_MACOS` and preset `ORDER` are integers; `HW_RECOMMEND` values ∈ the known machine families; `CATEGORY` ∈ the known category set |
+| V6 | `ARCHS` values ∈ {`arm64`, `x86_64`}; `MIN_MACOS` and preset `ORDER` are integers; `HW_RECOMMEND` values ∈ the known machine families; `CATEGORY` ∈ the known category set; `ARCHITECTURE` ∈ {`universal`, `arm64`, `intel`} |
 | V7 | Every preset's `APPS` entry resolves to an existing application directory |
-| V8 | No duplicate application ID globally (enforced by directory structure) or preset `[id]` section within `presets.conf`; no duplicate application ID within one preset's `APPS`; no `method:PACKAGE` pair defined by more than one application |
+| V8 | No duplicate application ID globally (enforced by directory structure) or preset `[id]` section within `presets.conf`; no duplicate application ID within one preset's `APPS`; no `method:PACKAGE_NAME` pair defined by more than one application |
 | V9 | No duplicate `KEY=` line within one `app.conf` or one preset's `[id]` section — the parser silently keeps only the first occurrence, so a repeated key is otherwise an invisible catalog inconsistency |
+| V10 | `PACKAGE_TYPE` agrees with `INSTALL_METHOD` (`brew`↔`formula`, `cask`↔`cask`, `mas`↔`app-store`, `pkg`/`dmg`↔`installer`, `manual`↔`manual`) — deliberately redundant metadata that must never drift apart, see CATALOG_STANDARD.md |
+| V11 | No two applications share a `NAME` or a `HOMEPAGE` — the signature of the same real application accidentally catalogued twice under different IDs |
+| V12 | Every `RELATED` entry resolves to an existing application (same check as preset V7, applied to this field) — `ALTERNATIVES` is deliberately exempt, see its field entry above |
 
 ## Catalog Doctor (advisory diagnostics)
 
@@ -274,16 +326,21 @@ V5. A recommendation without reasoning is invalid, not merely improvable.
 
 ## Adding catalog entries — technician quick reference
 
-**New application:** create `catalog/applications/<id>/`, write `app.conf` with the
-required fields and its `INSTALL_METHOD` (`PACKAGE` for brew/cask/mas,
-`DOWNLOAD_URL` for manual/pkg/dmg). Verify the package identifier against the real
-installation method — `brew info --formula <name>` or `brew info --cask <name>` —
-before committing it. If the app isn't available through Homebrew, that is not a
+**New application:** create `catalog/applications/<id>/`, write `app.conf` per
+[CATALOG_STANDARD.md](CATALOG_STANDARD.md) — the required fields, its
+`INSTALL_METHOD` (`PACKAGE_NAME` for brew/cask/mas, `DOWNLOAD_URL` for
+manual/pkg/dmg), a matching `PACKAGE_TYPE`, plus `HOMEPAGE`, `LICENSE`, and
+`ARCHITECTURE`. Verify the package identifier against the real installation
+method — `brew info --formula <name>` or `brew info --cask <name>` — before
+committing it. If the app isn't available through Homebrew, that is not a
 problem: declare it `manual` with its download page. If it's a JB Pick, write the
-reason — the note is what makes it a recommendation. Set `CATEGORY` to exactly one
+reason — the note is what makes it a recommendation, and it should reflect real
+operational experience, not just "this app is now in the catalog" (see
+CATALOG_STANDARD.md's "What JB_PICK means here"). Set `CATEGORY` to exactly one
 value from the known set — that's what places the app in the Application Catalog
 browser. Resist adding a new category for one app; check whether an existing
-category already fits before proposing a new one (see the ADR).
+category already fits before proposing a new one (see the ADR and
+[CATALOG_CONSTITUTION.md](CATALOG_CONSTITUTION.md) §2–3).
 
 **New preset:** add an `[id]` section to `catalog/presets.conf` with `NAME`,
 `DESCRIPTION`, optionally `ORDER`, and `APPS` — every application ID the preset

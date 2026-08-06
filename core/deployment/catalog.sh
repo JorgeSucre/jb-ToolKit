@@ -23,7 +23,26 @@ PRESETS_FILE="$CATALOG_DIR/presets.conf"
 # The only values CATEGORY may take. Adding one is a deliberate taxonomy
 # decision (see the ADR) — not something a new app.conf should introduce on
 # its own, which is why the validator (V6) rejects anything outside this set.
-CATALOG_CATEGORIES="browsers communication creative development hardware networking productivity utilities"
+# v2.3.0: hardware+utilities merged into system; ai/device-management/media/
+# security/printers-scanners added — see docs/CATALOG_STANDARD.md.
+# v2.3.1: cloud added — six cloud-storage/sync clients is enough volume to
+# earn a dedicated category rather than being scattered across productivity
+# and system; see docs/CATALOG_STANDARD.md.
+CATALOG_CATEGORIES="ai browsers cloud communication creative development device-management media networking printers-scanners productivity security system"
+
+# PACKAGE_TYPE values, keyed by the INSTALL_METHOD they must agree with —
+# metadata-first (CATALOG_CONSTITUTION.md §8), deliberately redundant with
+# INSTALL_METHOD so a future consumer never has to know that "cask" is
+# spelled INSTALL_METHOD=cask today. V10 keeps the two from drifting apart.
+_package_type_for_method() {
+    case "$1" in
+        brew)      printf "formula\n" ;;
+        cask)      printf "cask\n" ;;
+        mas)       printf "app-store\n" ;;
+        pkg|dmg)   printf "installer\n" ;;
+        manual)    printf "manual\n" ;;
+    esac
+}
 
 CATALOG_ERRORS=0
 
@@ -181,6 +200,24 @@ apps_in_category() {
     done | sort -t'|' -k1,1 | cut -d'|' -f2
 }
 
+# catalog_matches_query ID QUERY — true iff QUERY is a case-insensitive
+# substring of NAME or DESCRIPTION. Pure substring, not fuzzy: for a
+# ~200-item flat list this already resolves partial names/typos well enough
+# without a real edit-distance algorithm's extra code. Plain bash (tr +
+# [[ == *...* ]]), not awk — the system awk on macOS has no IGNORECASE.
+catalog_matches_query() {
+    local id="$1" query="$2"
+    local haystack
+
+    [[ -z "$query" ]] && return 0
+
+    haystack="$(app_field "$id" NAME) $(app_field "$id" DESCRIPTION)"
+    haystack="$(tr '[:upper:]' '[:lower:]' <<< "$haystack")"
+    query="$(tr '[:upper:]' '[:lower:]' <<< "$query")"
+
+    [[ "$haystack" == *"$query"* ]]
+}
+
 # Application IDs whose HW_RECOMMEND matches this machine.
 # apps_recommended_for_hardware FAMILY HAS_EXTERNAL_DISPLAY(0|1)
 # A tag matches when it equals FAMILY, or when it is "external_display"
@@ -206,7 +243,7 @@ apps_recommended_for_hardware() {
 }
 
 # =========================
-# Validation (rules V1–V9, docs/Catalog-Format.md)
+# Validation (rules V1–V12, docs/Catalog-Format.md)
 # =========================
 
 catalog_error() {
@@ -243,16 +280,16 @@ _flag_line() {
 validate_application() {
     local id="$1"
     local conf ref="applications/$id/app.conf"
-    local field method value arch tag
+    local field method value arch tag package_type related
     conf="$(app_conf_path "$id")"
 
     _valid_id "$id" \
         || catalog_error "V1: $ref — ID de directorio inválido (kebab-case requerido)"
 
-    [[ "$(app_field "$id" ID)" == "$id" ]] \
-        || catalog_error "V1: $ref — el campo ID no coincide con el directorio"
+    [[ "$(app_field "$id" APP_ID)" == "$id" ]] \
+        || catalog_error "V1: $ref — el campo APP_ID no coincide con el directorio"
 
-    for field in NAME DESCRIPTION; do
+    for field in NAME DESCRIPTION HOMEPAGE LICENSE; do
         [[ -n "$(app_field "$id" "$field")" ]] \
             || catalog_error "V2: $ref — falta el campo requerido $field"
     done
@@ -260,8 +297,8 @@ validate_application() {
     method="$(app_field "$id" INSTALL_METHOD)"
     case "$method" in
         brew|cask|mas)
-            [[ -n "$(app_field "$id" PACKAGE)" ]] \
-                || catalog_error "V3: $ref — INSTALL_METHOD=$method requiere PACKAGE"
+            [[ -n "$(app_field "$id" PACKAGE_NAME)" ]] \
+                || catalog_error "V3: $ref — INSTALL_METHOD=$method requiere PACKAGE_NAME"
             ;;
         pkg|dmg|manual)
             [[ -n "$(app_field "$id" DOWNLOAD_URL)" ]] \
@@ -275,11 +312,38 @@ validate_application() {
             ;;
     esac
 
+    # Legacy keys — pre-v2.3.0 field names rejected as hard errors so a
+    # leftover ID=/PACKAGE= line from an unmigrated file never becomes a
+    # silent no-op (same reasoning as the v2.0.0 BREW/CASK rejection below)
+    for field in ID PACKAGE; do
+        [[ -n "$(_flag_line "$conf" "$field")" ]] \
+            && catalog_error "V3: $ref — la clave $field ya no existe; usa APP_ID / PACKAGE_NAME"
+    done
+
     # Legacy keys from the v2.0.0 contract — silent no-ops if left behind
     for field in BREW CASK; do
         [[ -n "$(_flag_line "$conf" "$field")" ]] \
-            && catalog_error "V3: $ref — la clave $field ya no existe; usa INSTALL_METHOD y PACKAGE"
+            && catalog_error "V3: $ref — la clave $field ya no existe; usa INSTALL_METHOD y PACKAGE_NAME"
     done
+
+    if [[ -n "$method" ]]; then
+        package_type="$(app_field "$id" PACKAGE_TYPE)"
+        if [[ -z "$package_type" ]]; then
+            catalog_error "V2: $ref — falta el campo requerido PACKAGE_TYPE"
+        elif [[ "$package_type" != "$(_package_type_for_method "$method")" ]]; then
+            catalog_error "V10: $ref — PACKAGE_TYPE='$package_type' no concuerda con INSTALL_METHOD=$method (se esperaba '$(_package_type_for_method "$method")')"
+        fi
+    fi
+
+    value="$(app_field "$id" ARCHITECTURE)"
+    if [[ -z "$value" ]]; then
+        catalog_error "V2: $ref — falta el campo requerido ARCHITECTURE"
+    else
+        case "$value" in
+            universal|arm64|intel) ;;
+            *) catalog_error "V6: $ref — valor desconocido en ARCHITECTURE: '$value' (universal|arm64|intel)" ;;
+        esac
+    fi
 
     value="$(_flag_line "$conf" JB_PICK)"
     if [[ -n "$value" && "$value" != "true" ]]; then
@@ -316,6 +380,14 @@ validate_application() {
     elif ! grep -qw "$value" <<< "$CATALOG_CATEGORIES"; then
         catalog_error "V6: $ref — categoría desconocida en CATEGORY: '$value'"
     fi
+
+    # V12 — RELATED is catalog-internal by definition (unlike the free-text
+    # ALTERNATIVES, which deliberately may name software this catalog
+    # doesn't carry), so every entry must resolve to a real application.
+    for related in $(app_field "$id" RELATED); do
+        app_exists "$related" \
+            || catalog_error "V12: $ref — RELATED referencia una aplicación inexistente: '$related'"
+    done
 
     while IFS= read -r field; do
         [[ -z "$field" ]] && continue
@@ -384,8 +456,36 @@ validate_package_uniqueness() {
         catalog_error "V8: el paquete '$dup' está definido en más de una aplicación"
     done < <(
         for id in $(list_applications); do
-            pkg="$(app_field "$id" PACKAGE)"
+            pkg="$(app_field "$id" PACKAGE_NAME)"
             [[ -n "$pkg" ]] && printf "%s:%s\n" "$(app_field "$id" INSTALL_METHOD)" "$pkg"
+        done | sort | uniq -d
+    )
+}
+
+# V11 (global): no two applications may share a NAME or a HOMEPAGE — the
+# signature of an accidental duplicate catalog entry for the same real
+# application under two different IDs. CATEGORY-level duplication (one
+# app, one category) is already structurally guaranteed by CATEGORY being
+# single-valued; this is the cross-application check the single-valued
+# CATEGORY rule doesn't cover.
+validate_duplicate_applications() {
+    local id dup
+
+    while IFS= read -r dup; do
+        [[ -z "$dup" ]] && continue
+        catalog_error "V11: el nombre de aplicación '$dup' está definido en más de un app.conf"
+    done < <(
+        for id in $(list_applications); do
+            app_field "$id" NAME
+        done | sort | uniq -d
+    )
+
+    while IFS= read -r dup; do
+        [[ -z "$dup" ]] && continue
+        catalog_error "V11: el HOMEPAGE '$dup' está definido en más de una aplicación"
+    done < <(
+        for id in $(list_applications); do
+            app_field "$id" HOMEPAGE
         done | sort | uniq -d
     )
 }
@@ -420,6 +520,7 @@ validate_catalog() {
 
     validate_preset_uniqueness
     validate_package_uniqueness
+    validate_duplicate_applications
 
     echo ""
 

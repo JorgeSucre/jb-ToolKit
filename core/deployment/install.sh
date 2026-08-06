@@ -139,9 +139,10 @@ run_plan_installation() {
 
     [[ "$PLAN_READY" -eq 1 ]] || return 0
 
-    local plan_file record id name method pkg result
+    local plan_file record id name method pkg result cmd_ok
     local available_count=0 index=0 total=0
-    local -a queue=()
+    local -a queue=() install_cmd=()
+    local INSTALL_RESULTS=""
 
     if [[ "$PLAN_APP_COUNT" -gt 0 ]] && ! brew_available; then
         error_msg "❌ Homebrew no está disponible; ejecuta Initial Setup primero"
@@ -198,9 +199,15 @@ run_plan_installation() {
         info "ℹ️ Cada aplicación se instala por separado; un fallo no detiene al resto"
         echo ""
 
-        # The engine pattern, per application: retry + run_cmd --visible,
-        # verified afterward. A failure here is only noted; the verdict
-        # comes from the post-run verification below.
+        # The engine pattern, per application: retry + run_cmd --visible.
+        # `brew install` on an already-installed package is a no-op that
+        # still exits 0 — Homebrew's own exit code is authoritative proof
+        # of presence, so it is recorded per app (cmd_ok) and trusted first
+        # in the verification pass below. A command that reports an error
+        # still gets a query-based check at the end, since some errors are
+        # cosmetic and the package can be genuinely present anyway — but an
+        # app whose install command succeeded is never demoted to "failed"
+        # by a query that misfires afterward.
         total="$available_count"
         for ((index=0; index<total; index++)); do
             IFS='|' read -r id name method pkg <<< "${queue[$index]}"
@@ -209,21 +216,30 @@ run_plan_installation() {
             log "📦 [$((index + 1))/$total] $name"
 
             if [[ "$method" == "brew" ]]; then
-                HOMEBREW_NO_ENV_HINTS=1 retry 3 5 run_cmd --visible brew install "$pkg" \
-                    || warn "⚠️ La instalación de $name reportó errores; se verificará al final"
+                install_cmd=(brew install "$pkg")
             else
-                HOMEBREW_NO_ENV_HINTS=1 retry 3 5 run_cmd --visible brew install --cask "$pkg" \
-                    || warn "⚠️ La instalación de $name reportó errores; se verificará al final"
+                install_cmd=(brew install --cask "$pkg")
+            fi
+
+            if HOMEBREW_NO_ENV_HINTS=1 retry 3 5 run_cmd --visible "${install_cmd[@]}"; then
+                INSTALL_RESULTS+="$id|$name|$method|$pkg|1"$'\n'
+            else
+                warn "⚠️ La instalación de $name reportó errores; se verificará al final"
+                INSTALL_RESULTS+="$id|$name|$method|$pkg|0"$'\n'
             fi
         done
 
-        # Verification: confirmed outcomes only, from a fresh query
+        # Verification: a package whose install command already succeeded
+        # is confirmed installed without needing the query at all. Only
+        # apps whose command reported an error fall back to a fresh
+        # Homebrew query, to catch the case where the error was cosmetic.
         brew_cache_reset
 
-        while IFS='|' read -r id name method pkg; do
+        while IFS='|' read -r id name method pkg cmd_ok; do
             [[ -z "$id" ]] && continue
 
-            if { [[ "$method" == "brew" ]] && brew_formula_installed "$pkg"; } \
+            if [[ "$cmd_ok" -eq 1 ]] \
+                || { [[ "$method" == "brew" ]] && brew_formula_installed "$pkg"; } \
                 || { [[ "$method" == "cask" ]] && brew_cask_installed "$pkg"; }; then
                 TXN_INSTALLED_APPS+="$id|$name"$'\n'
                 TXN_INSTALLED=$((TXN_INSTALLED + 1))
@@ -232,7 +248,7 @@ run_plan_installation() {
                 TXN_FAILED=$((TXN_FAILED + 1))
             fi
 
-        done <<< "$INSTALL_AVAILABLE"
+        done <<< "$INSTALL_RESULTS"
     fi
 
     # Manual steps are honest outcomes, never deployment failures

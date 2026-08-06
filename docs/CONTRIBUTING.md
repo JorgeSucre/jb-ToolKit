@@ -237,6 +237,16 @@ pipeline and [architecture/0006-deployment-flattening.md](architecture/0006-depl
 for why bundles/profiles were removed; [Deployment-Design.md](Deployment-Design.md)
 is the pre-v2.2 design history.
 
+As of v2.3.0 every application also carries `HOMEPAGE`, `LICENSE`,
+`PACKAGE_TYPE`, and `ARCHITECTURE` — metadata with no consumer in Deployment
+today, populated because the information is cheapest to gather at add-time,
+not because anything reads it yet (see
+[CATALOG_CONSTITUTION.md](CATALOG_CONSTITUTION.md) §8 and
+[CATALOG_STANDARD.md](CATALOG_STANDARD.md) for the complete schema and the
+philosophy behind it). `ID`/`PACKAGE` were renamed to `APP_ID`/`PACKAGE_NAME`
+in the same pass; the old names are hard validation errors, not silent
+no-ops, same treatment as the v2.0.0 `BREW`/`CASK` keys.
+
 ## Testing expectations
 
 There is no test framework; verification is manual and honest:

@@ -229,65 +229,32 @@ Ideal para entregar a clientes después de un servicio de mantenimiento.
 
 Todo el software desplegable vive en el catálogo (`catalog/`): cada
 aplicación pertenece a exactamente una categoría, y esa categoría es
-puramente de navegación — nunca afecta cómo se instala. El catálogo actual
-incluye:
+puramente de navegación — nunca afecta cómo se instala. Cada aplicación
+incluye además metadatos como homepage, licencia y arquitectura — ver
+[docs/CATALOG_STANDARD.md](docs/CATALOG_STANDARD.md). El catálogo (121
+aplicaciones curadas, no exhaustivas — ver
+[docs/CATALOG_CONSTITUTION.md](docs/CATALOG_CONSTITUTION.md)) se organiza en
+12 categorías:
 
-### Utilidades
-
-- AppCleaner
-- Keka
-- Rectangle
-- OpenLogi
-- Mole
-- Android Platform Tools
-
-### Hardware
-
-- AlDente
-- Macs Fan Control
-- BetterDisplay
-- Stats
-
-### Productividad
-
-- Microsoft Word
-- Microsoft Excel
-- OneDrive
-- PDFgear (instalación manual — no disponible en Homebrew)
-- ChatGPT
-
-### Desarrollo
-
-- Git
-- Visual Studio Code
-- Node.js
-- pnpm
-- Docker Desktop
-- Codex
-- Google Antigravity
-
-### Redes
-
-- Tailscale
-- Wireshark
-- Nmap
-- Angry IP Scanner
-
-### Multimedia
-
-- Kdenlive
-- GIMP
-
-### Comunicación
-
-- Discord
-
-### Navegadores
-
-- Floorp
+| Categoría | Ejemplos |
+|---|---|
+| IA | ChatGPT, Claude, Ollama, LM Studio, Google Antigravity, Codex |
+| Navegadores | Firefox, Google Chrome, Brave, Floorp, Zen |
+| Comunicación | Discord, Slack, WhatsApp, Telegram, Zoom |
+| Productividad | Microsoft Word/Excel/PowerPoint, Notion, Obsidian, OneDrive, PDFgear |
+| Desarrollo | Git, Visual Studio Code, Docker Desktop, Cursor, Postman, Node.js, pnpm |
+| Creatividad | GIMP, Kdenlive, DaVinci Resolve, OBS Studio |
+| Redes | Tailscale, Wireshark, Nmap, Angry IP Scanner, ZeroTier |
+| Gestión de dispositivos | Android Platform Tools, Apple Configurator, balenaEtcher |
+| Sistema | AppCleaner, Keka, Rectangle, Stats, AlDente, Macs Fan Control, OpenLogi |
+| Multimedia | VLC, Spotify, Steam, HandBrake, IINA, FFmpeg |
+| Seguridad | 1Password, Bitwarden, Little Snitch, VeraCrypt, WireGuard |
+| Impresoras y escáneres | HP Smart, Canon PRINT, Epson Smart Panel, Brother iPrint&Scan |
 
 Agregar una aplicación nueva es editar un archivo de texto en `catalog/` —
-sin cambios de código. Ver [catalog/README.md](catalog/README.md).
+sin cambios de código. Ver [catalog/README.md](catalog/README.md) y
+[docs/CATALOG_STANDARD.md](docs/CATALOG_STANDARD.md) para el esquema
+completo de metadatos.
 
 ---
 

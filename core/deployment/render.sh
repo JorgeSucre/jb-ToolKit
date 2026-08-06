@@ -8,7 +8,11 @@
 # future interfaces can reuse the planner without touching this file.
 
 # plan_source_label PROVENANCE — human label for a plan record's
-# provenance ("preset:<id>", "hardware", or "manual" — see selection.sh)
+# provenance ("preset:<id>" or "manual" — see selection.sh). As of v2.4.0
+# there is no "hardware" provenance: recommendations are advisory-only (a
+# ★ badge) and never add anything to the selection themselves, so a
+# manually-added recommended app is indistinguishable from any other
+# manual pick here, same as it always was for non-recommended apps.
 plan_source_label() {
     local provenance="$1" preset_id
 
@@ -21,8 +25,7 @@ plan_source_label() {
                 printf "plantilla\n"
             fi
             ;;
-        hardware) printf "recomendación para este Mac\n" ;;
-        *)        printf "selección manual\n" ;;
+        *) printf "selección manual\n" ;;
     esac
 }
 
@@ -64,16 +67,135 @@ render_application() {
     fi
 }
 
+# install_method_label METHOD — friendly Spanish label for the detail view
+install_method_label() {
+    case "$1" in
+        brew)   printf "Homebrew (formula)\n" ;;
+        cask)   printf "Homebrew (cask)\n" ;;
+        mas)    printf "Mac App Store\n" ;;
+        pkg)    printf "Instalador .pkg\n" ;;
+        dmg)    printf "Imagen .dmg\n" ;;
+        manual) printf "Descarga manual\n" ;;
+        *)      printf "%s\n" "$1" ;;
+    esac
+}
+
+# render_application_detail ID — the Application View, optimized for fast
+# installation decisions (v2.4.1): status leads, everything else is either
+# collapsed into one compact metadata line or shown only when it carries
+# real information. Pure presentation over app_field reads — same "no
+# resolution here" contract as the rest of this file.
+#
+# ARCHITECTURE is deliberately not shown: it's documented as purely
+# descriptive ("never gates anything," CATALOG_STANDARD.md), reads
+# "universal" for nearly every catalog entry, and the one thing that DOES
+# gate compatibility (ARCHS) is already reflected in Estado above. Zero
+# decision value for a line of screen space.
+render_application_detail() {
+    local id="$1"
+    local value related_id reason
+
+    print_section "📋 $(app_field "$id" NAME)"
+
+    # Status first — "do I even need to install this?" is the single most
+    # decision-relevant fact this screen can show, so it leads rather than
+    # sitting buried among static metadata (v2.4.0).
+    if ! reason="$(app_incompatibility_reason "$id")"; then
+        printf "Estado: ⛔ %s\n" "$reason"
+    elif app_already_installed "$id"; then
+        printf "Estado: ${GREEN}✔ Ya instalada${NC}\n"
+    elif grep -qx "$id" <<< "$CATALOG_MENU_HW_IDS"; then
+        printf "Estado: ★ Recomendada para tu equipo\n"
+    else
+        printf "Estado: Disponible para instalar\n"
+    fi
+
+    echo ""
+    echo "$(app_field "$id" DESCRIPTION)"
+
+    echo ""
+    printf "%s · %s · %s\n" \
+        "$(app_field "$id" CATEGORY)" \
+        "$(app_field "$id" LICENSE)" \
+        "$(install_method_label "$(app_field "$id" INSTALL_METHOD)")"
+    printf "Homepage: %s\n" "$(app_field "$id" HOMEPAGE)"
+
+    value="$(app_field "$id" REQUIREMENTS)"
+    [[ -n "$value" ]] && printf "Requisitos: %s\n" "$value"
+
+    value="$(app_field "$id" NOTES)"
+    if [[ -n "$value" ]]; then
+        echo ""
+        printf "ℹ️ %s\n" "$value"
+    fi
+
+    if [[ "$(app_field "$id" JB_PICK)" == "true" ]]; then
+        echo ""
+        printf "⭐ Nota de JB: %s\n" "$(app_field "$id" JB_PICK_NOTE)"
+    fi
+
+    value="$(app_field "$id" ALTERNATIVES)"
+    [[ -n "$value" ]] && { echo ""; printf "Alternativas: %s\n" "$value"; }
+
+    value="$(app_field "$id" RELATED)"
+    if [[ -n "$value" ]]; then
+        echo ""
+        echo "Relacionadas:"
+        for related_id in $value; do
+            if app_exists "$related_id"; then
+                printf "   • %s\n" "$(app_field "$related_id" NAME)"
+            fi
+        done
+    fi
+}
+
 # =========================
 # Plan renderers
 # =========================
+
+# _plan_installed_count BLOCK — how many "id|..." records in BLOCK are
+# already installed, checked fresh (app_already_installed) at render time.
+# Used by render_confirmation so the automatic and manual tracks can each
+# be counted without duplicating the check twice inline.
+_plan_installed_count() {
+    local block="$1" id _rest count=0
+
+    while IFS='|' read -r id _rest; do
+        [[ -z "$id" ]] && continue
+        app_already_installed "$id" && count=$((count + 1))
+    done <<< "$block"
+
+    printf "%s\n" "$count"
+}
+
+# _plan_recommended_unselected — hardware-recommended app IDs for this
+# machine that never made it into the current selection, one per line.
+# Only meaningful now that recommendations are advisory-only (v2.4.0) — a
+# technician can genuinely skip one, and the plan should say so before
+# installing, not after. Freshly computed at render time from
+# SELECTED_APPS (still the exact membership the plan was built from — see
+# menu.sh) and apps_recommended_for_hardware, same "recompute, don't
+# store" pattern render_plan_tree already uses rather than a new PLAN_*
+# field.
+_plan_recommended_unselected() {
+    local family has_ext=0 id
+
+    detect_machine_family
+    family="$MACHINE_FAMILY"
+    has_external_display && has_ext=1
+
+    while IFS= read -r id; do
+        [[ -z "$id" ]] && continue
+        selection_contains "$id" || printf "%s\n" "$id"
+    done < <(apps_recommended_for_hardware "$family" "$has_ext")
+}
 
 # Explain view: the full plan with provenance and reasons
 render_plan() {
 
     [[ "$PLAN_READY" -eq 1 ]] || return 0
 
-    local id name provenance reason
+    local id name provenance reason recommended_unselected
 
     print_section "🧭 Plan de despliegue: $PLAN_PRESET_NAME"
 
@@ -118,6 +240,16 @@ render_plan() {
             printf "   ★ %s\n" "$(app_field "$id" NAME)"
             printf "       %s\n" "$(app_field "$id" JB_PICK_NOTE)"
         done <<< "$PLAN_PICKS"
+    fi
+
+    recommended_unselected="$(_plan_recommended_unselected)"
+    if [[ -n "$recommended_unselected" ]]; then
+        echo ""
+        echo "Recomendadas para este equipo, no seleccionadas:"
+        while IFS= read -r id; do
+            [[ -z "$id" ]] && continue
+            printf "   ★ %s\n" "$(app_field "$id" NAME)"
+        done <<< "$recommended_unselected"
     fi
 }
 
@@ -212,23 +344,42 @@ render_plan_summary() {
 }
 
 # Confirmation summary: the final planning screen — the "Review Selection"
-# step. count / estimated installs / compatibility exclusions, then confirm.
+# step. As of v2.4.1 this is glyph-led, reusing the exact vocabulary the
+# Application Catalog and the result screen already taught the technician
+# (✔ installed, ⭐ picks, ★ recommended, ✋ manual) instead of six lines that
+# all have to be read to be told apart — scannable by symbol, not by
+# reading every label. Counts are unchanged from v2.4.0 (still computed
+# fresh at render time, no new PLAN_* field): what will actually change on
+# this machine (will install / already installed) vs. what won't be
+# touched either way (manual steps, recommended-but-skipped, unavailable).
 render_confirmation() {
 
     [[ "$PLAN_READY" -eq 1 ]] || return 0
+
+    local auto_installed total_installed recommended_skipped
+
+    auto_installed="$(_plan_installed_count "$PLAN_APPS")"
+    total_installed=$((auto_installed + $(_plan_installed_count "$PLAN_MANUAL")))
+    recommended_skipped="$(_plan_recommended_unselected | grep -c . || true)"
 
     print_section "🚀 Confirmación del despliegue"
 
     printf "Plantilla: %s\n" "$PLAN_PRESET_NAME"
 
     echo ""
-    printf "Aplicaciones seleccionadas:  %s\n" "$((PLAN_APP_COUNT + PLAN_MANUAL_COUNT))"
-    printf "Instalación automática:      %s\n" "$PLAN_APP_COUNT"
-    printf "Instalación manual:          %s\n" "$PLAN_MANUAL_COUNT"
-    printf "JB Picks incluidos:          %s\n" "$PLAN_PICK_COUNT"
+    printf "   %2d  aplicaciones seleccionadas\n" "$((PLAN_APP_COUNT + PLAN_MANUAL_COUNT))"
+    echo ""
+    printf " → %2d  se instalarán\n" "$((PLAN_APP_COUNT - auto_installed))"
+    printf " ${GREEN}✔${NC} %2d  ya instaladas\n" "$total_installed"
+    printf " ✋ %2d  instalación manual\n" "$PLAN_MANUAL_COUNT"
+    printf " ⭐ %2d  JB Picks incluidos\n" "$PLAN_PICK_COUNT"
+
+    if [[ "$recommended_skipped" -gt 0 ]]; then
+        printf " ★ %2d  recomendadas sin seleccionar\n" "$recommended_skipped"
+    fi
 
     if [[ "$PLAN_SKIP_COUNT" -gt 0 ]]; then
-        printf "No compatibles (excluidas):  %s\n" "$PLAN_SKIP_COUNT"
+        printf " ⚠️ %2d  no compatibles (excluidas)\n" "$PLAN_SKIP_COUNT"
     fi
 
     echo ""

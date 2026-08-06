@@ -12,10 +12,11 @@ hierarchy of earlier versions.
 
 ```mermaid
 flowchart TD
-    CAT[(Catalog<br/>applications · presets)] --> PICK[Quick Presets<br/>optional shortcut]
+    CAT[(Catalog<br/>applications · presets)] --> BROWSE[Application Catalog<br/>grid, add / remove / toggle<br/>THE entry point]
+    CAT -. "wizard.sh / CLI only" .-> PICK[Preset]
     PICK --> SEL[Selected Applications<br/>ONE representation]
-    HW[Hardware recommendations<br/>HW_RECOMMEND matches] --> SEL
-    BROWSE[Application Catalog<br/>add / remove / toggle] --> SEL
+    HW[Hardware recommendations<br/>HW_RECOMMEND matches] -. "★ advisory badge only" .-> BROWSE
+    BROWSE --> SEL
     SEL --> PLN[Planner]
     PLN --> PLAN[/Installation Plan<br/>automatic + manual tracks/]
     PLAN --> REN[Renderer]
@@ -30,31 +31,40 @@ flowchart TD
     STATE --> REP[Reporting]
 ```
 
-The pipeline has two consumers: the **Deployment module** (launcher option 4) and
-**Bootstrap's onboarding wizard** (launcher option 1), which sources the same
-sub-module libraries and asks one question — how will this Mac be used? — before
-handing off to the exact same `start_deployment_flow` function the Deployment
-menu's preset picker calls. There is one catalog, one selection model, one
-planner, and one installer in the toolkit; Bootstrap owns no software selection
-of its own.
+The pipeline has two consumers: the **Deployment module** (launcher option 4),
+which goes straight to the Application Catalog with an empty selection — no
+preset-picker screen first, and as of v2.4.1 no interactive way to load a
+preset at all (see
+[architecture/0012-terminal-ui-refinement.md](architecture/0012-terminal-ui-refinement.md))
+— and **Bootstrap's onboarding wizard** (launcher option 1), which still asks
+its own question — how will this Mac be used? — before calling the same
+`start_deployment_flow` function with a preset already chosen. Both are the
+exact same function; only *whether* a preset is chosen before entering the
+catalog differs. Presets remain fully real — `catalog/presets.conf`, the CLI
+flags, and the wizard all use them exactly as before — they are simply not
+exposed inside the Application Catalog screen itself. There is one catalog,
+one selection model, one planner, and one installer in the toolkit;
+Bootstrap owns no software selection of its own.
 
 **Everything is one workflow around one concept: Selected Applications.**
-Whether an application enters that set via a Quick Preset, a hardware
-recommendation, or a manual toggle in the Application Catalog, it is
-indistinguishable in representation from that point on — there is exactly one
-code path from selection to plan (`build_plan_from_selection`), never a
-preset-specific or bundle-specific execution branch.
+Whether an application enters that set via a loaded preset or a manual toggle
+in the Application Catalog, it is indistinguishable in representation from
+that point on — there is exactly one code path from selection to plan
+(`build_plan_from_selection`), never a preset-specific or bundle-specific
+execution branch. Hardware recommendations (`HW_RECOMMEND`) are
+**advisory-only** as of v2.4.0 — a ★ badge shown in the Application Catalog,
+never a silent addition to the selection.
 
 ## Layer responsibilities
 
 | Layer | File | Responsibility | Explicitly NOT its job |
 |---|---|---|---|
-| **Catalog** | `catalog/` + `core/deployment/catalog.sh` | Data and access: applications (the only place package names exist), presets, `CATEGORY`-based browsing queries (one app, one category), hard validation (V1–V9) | Deciding what to install |
+| **Catalog** | `catalog/` + `core/deployment/catalog.sh` | Data and access: applications (the only place package names exist), presets, `CATEGORY`-based browsing queries (one app, one category), hard validation (V1–V12) | Deciding what to install |
 | **Doctor** | `core/deployment/doctor.sh` | Advisory maintainability diagnostics on a valid catalog | Failing validation — advisories never block |
-| **Selection** | `core/deployment/selection.sh` | **The one selection model.** `SELECTED_APPS`: add/remove/toggle, preset loading, hardware-recommendation folding, and per-app compatibility checking (`app_incompatibility_reason`, moved here from the former resolver — this is exactly "can this app join the selection") | Presentation, planning, persistence |
+| **Selection** | `core/deployment/selection.sh` | **The one selection model.** `SELECTED_APPS`: add/remove/toggle, preset loading, per-app compatibility checking (`app_incompatibility_reason`), and the shared "is this already installed" fact-check (`app_already_installed`, v2.4.0) used by the catalog screen and the plan preview | Presentation, planning, persistence, deciding what's recommended |
 | **Planner** | `core/deployment/planner.sh` | **The only decision-making layer past selection.** Classifies `SELECTED_APPS` into automatic/manual tracks by `INSTALL_METHOD`, counts JB Picks, freezes a plan. Does not resolve presets, does not know what a category is | Executing anything, deciding what's selected |
-| **Renderer** | `core/deployment/render.sh` | Pure presentation of catalog/plan/transaction data: preset summaries, explain, the preset-vs-selection diff view, confirmation, result | Resolving, deciding, mutating |
-| **Menus** | `core/deployment/menu.sh` + `confirm.sh` | The Quick Presets picker; the Application Catalog (the one screen selection actually happens in — add/remove/toggle without leaving it); the confirmation gate. Menus only **collect** technician decisions — the planner applies them | Hardcoded names, planning logic, filtering anything itself |
+| **Renderer** | `core/deployment/render.sh` | Pure presentation of catalog/plan/transaction data: preset summaries, explain, the preset-vs-selection diff view, confirmation (as of v2.4.0: will-install / already-installed / recommended-but-skipped counts, computed fresh at render time), result | Resolving, deciding, mutating |
+| **Menus** | `core/deployment/menu.sh` + `confirm.sh` | The Application Catalog (the one screen selection actually happens in, and the entry point itself — a responsive 1–3 column grid as of v2.4.1, add/remove/toggle without leaving it); the confirmation gate. Menus only **collect** technician decisions — the planner applies them | Hardcoded names, planning logic, filtering anything itself, loading presets (interactive UI has none as of v2.4.1) |
 | **Installer** | `core/deployment/install.sh` | Executes an already-built plan: partition installed/pending (Homebrew query for automatic apps, `/Applications` existence for manual ones), read-only pre-flight against Homebrew's index, invoke the engine per application, verify per app, offer manual download pages | **Decisions of any kind** — no resolution, no compatibility rules, no catalog reads |
 | **Engine** | Bootstrap's proven pattern (`retry 3 5` + `run_cmd --visible brew install [--cask]`), applied **per application** | The only installation machinery in the toolkit. One failed or unavailable application never prevents the rest from installing | Being duplicated |
 | **Transaction** | `core/deployment/transaction.sh` | The execution record: what actually happened, verified counts, named outcomes, timing, cancellation | Making decisions, estimating |
@@ -73,7 +83,8 @@ The plan carries two tracks:
 
 - `PLAN_APPS` — `id|name|provenance|method|package` (method `brew`/`cask`): the
   automatic install list, in selection order, with display provenance
-  (`preset:<id>`, `hardware`, or `manual`).
+  (`preset:<id>` or `manual` — no `hardware` provenance as of v2.4.0;
+  recommendations are advisory-only and never enter `SELECTED_APPS`).
 - `PLAN_MANUAL` — `id|name|provenance|method|download-url` (method `mas`/`pkg`/`dmg`/
   `manual`): first-class plan members the toolkit cannot automate. Reported as
   manual steps at every stage; **never failures**.
@@ -152,20 +163,21 @@ and History — events are never reconstructed from logs when the record exists.
 ## Invariants (violations are design regressions)
 
 1. Data drives behavior; the Application Catalog's grouping is generated from
-   each application's single `CATEGORY`, the Quick Presets list from
-   `catalog/presets.conf`.
+   each application's single `CATEGORY`; the wizard's and CLI's preset lists
+   come from `catalog/presets.conf`.
 2. Applications and presets are each defined exactly once — every application
    owns exactly one category, every preset is exactly one `[id]` section.
    There is no intermediate grouping layer to keep in sync with either.
 3. A preset is a flat list of application IDs — no nested references, no
    installation logic, no nested composition.
-4. **`SELECTED_APPS` is the one selection model.** Preset-sourced,
-   hardware-recommended, and manually-added applications are
-   indistinguishable in representation past `selection.sh`; provenance is
-   display-only.
+4. **`SELECTED_APPS` is the one selection model.** Preset-sourced and
+   manually-added applications are indistinguishable in representation past
+   `selection.sh`; provenance is display-only. Hardware recommendations
+   never enter this set — they are advisory-only (a ★ badge), so there is
+   no "hardware" provenance to be indistinguishable from.
 5. The Planner is the only decision-making layer past selection. The
-   Application Catalog and the hardware-recommendation fold-in collect and
-   propose; they never filter what the planner sees.
+   Application Catalog collects and proposes; it never filters what the
+   planner sees.
 6. The Installer only executes; the engine (retry + `run_cmd --visible` +
    verification, per application) is the only installer, and Bootstrap consumes
    it through the same library instead of owning machinery of its own.

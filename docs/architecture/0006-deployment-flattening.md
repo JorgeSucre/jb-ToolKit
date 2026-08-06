@@ -56,7 +56,11 @@ Plan → Execution`. Concretely:
   concept.
 - **The Quick Presets screen is one flat list**, not a two-level
   category/subcategory menu. Presets carry an `ORDER` for display sequence;
-  there is no menu-nesting concept left to collapse.
+  there is no menu-nesting concept left to collapse. (As of v2.4.0 this flat
+  list moved from being a screen shown before the Application Catalog to a
+  command reachable from inside it — see
+  [0011-deployment-workflow-simplification.md](0011-deployment-workflow-simplification.md).
+  The list itself, and the reasoning for keeping it flat, is unchanged.)
 - **Compatibility exclusion moved from deferred reporting to live filtering.**
   An application incompatible with this Mac (`ARCHS`/`MIN_MACOS`) is shown
   in the Application Catalog with its reason instead of a checkbox — never

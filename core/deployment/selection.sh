@@ -4,16 +4,19 @@
 # Selected Applications
 # =========================
 # The ONE selection model. Whether an application enters the selection via a
-# preset, a hardware recommendation, or a manual toggle in the Application
-# Catalog, it ends up as exactly the same kind of record here — there is no
-# separate code path for "preset apps" vs "manually chosen apps" past this
-# point. Presets are shortcuts that populate this set; they are not a
-# parallel execution model.
+# preset or a manual toggle in the Application Catalog, it ends up as
+# exactly the same kind of record here — there is no separate code path for
+# "preset apps" vs "manually chosen apps" past this point. Presets are
+# shortcuts that populate this set; they are not a parallel execution model.
+#
+# As of v2.4.0, hardware recommendations are advisory-only (a ★ badge in the
+# Application Catalog, see menu.sh) and never call into this file — a
+# recommendation must never silently modify what a technician selected, so
+# there is deliberately no "hardware" provenance anymore.
 #
 # SELECTED_APPS: "id|provenance" one per line, first-occurrence-wins on
 # duplicates. provenance is display-only (never branched on downstream):
 #   preset:<id>   added by loading a preset
-#   hardware      added because HW_RECOMMEND matched this machine
 #   manual        added directly in the Application Catalog
 #
 # SELECTION_LOAD_SKIPPED: "id|reason" — applications a preset wanted to
@@ -111,6 +114,28 @@ app_incompatibility_reason() {
     return 0
 }
 
+# app_already_installed ID — true iff this application is already present
+# on the machine, checked the same way for every caller (Application
+# Catalog badge, the plan confirmation preview, and install.sh's pre-flight
+# partition) so "installed" can never mean something slightly different in
+# one screen than another. brew/cask methods read the session-level Homebrew
+# list cache (core/utils.sh) — no new `brew` subprocess per app, even called
+# once per application on every catalog redraw. Everything else (mas/pkg/
+# dmg/manual) falls back to the same /Applications bundle check install.sh
+# already did inline before this existed.
+app_already_installed() {
+    local id="$1" name
+
+    case "$(app_field "$id" INSTALL_METHOD)" in
+        brew) brew_formula_installed "$(app_field "$id" PACKAGE_NAME)" ;;
+        cask) brew_cask_installed "$(app_field "$id" PACKAGE_NAME)" ;;
+        *)
+            name="$(app_field "$id" NAME)"
+            [[ -d "/Applications/$name.app" ]]
+            ;;
+    esac
+}
+
 # =========================
 # Preset loading
 # =========================
@@ -134,37 +159,4 @@ load_preset_into_selection() {
         fi
 
     done < <(preset_apps "$preset_id")
-}
-
-# =========================
-# Hardware recommendations
-# =========================
-# Folded into the same selection the technician reviews — not a separate
-# offer screen. Only apps not already installed are added (mirrors the
-# previous offer_hardware_extras filter); already-installed apps are
-# neither offered nor need to be, since install.sh's partition step is
-# idempotent regardless.
-
-apply_hardware_recommendations() {
-    local family has_ext=0 id reason
-
-    detect_machine_family
-    family="$MACHINE_FAMILY"
-    has_external_display && has_ext=1
-
-    while IFS= read -r id; do
-        [[ -z "$id" ]] && continue
-
-        case "$(app_field "$id" INSTALL_METHOD)" in
-            brew) brew_formula_installed "$(app_field "$id" PACKAGE)" && continue ;;
-            cask) brew_cask_installed "$(app_field "$id" PACKAGE)" && continue ;;
-        esac
-
-        if reason="$(app_incompatibility_reason "$id")"; then
-            selection_add "$id" "hardware"
-        else
-            SELECTION_LOAD_SKIPPED+="$id|$reason"$'\n'
-        fi
-
-    done < <(apps_recommended_for_hardware "$family" "$has_ext")
 }
