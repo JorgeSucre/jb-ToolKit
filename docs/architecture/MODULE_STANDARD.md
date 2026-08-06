@@ -986,3 +986,127 @@ own header comment already states plainly ("a y/n gate inside
 `run_plan_installation` is the last stop before the system changes").
 This Contract records that as architectural reality rather than assuming
 the name describes the ownership.
+
+## 13. Migration draft: `Deployment.Renderer`
+
+**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
+adopted; `Deployment.Selection`, `Deployment.Planner`, and
+`Deployment.Confirm` have completed the correct-then-verify cycle.
+`Deployment.Renderer` is the next migration candidate. This Contract
+describes `core/deployment/render.sh` (471 lines, 14 functions) as it
+exists today. No Boundary Verification has been executed against it; it is
+not canonical until one has been.
+
+---
+
+### Deployment.Renderer
+
+**Purpose.** The single presentation layer for the Deployment pipeline —
+turns Catalog, Selection, Plan, and Transaction data into every screen and
+one-line summary a technician or the CLI ever sees, without resolving,
+validating, or mutating anything itself.
+
+**Responsibilities.**
+- Renders the Application Catalog's per-application detail view: a status
+  line with a fixed precedence (incompatible, then already-installed,
+  then hardware-recommended, then available), catalog metadata, and
+  related applications. `[checked by: Boundary]`
+- Renders the Installation Plan in three distinct forms: a full
+  explanation with per-application provenance, a concise resolution
+  summary, and a diff against the plan's source preset. `[checked by:
+  Boundary]`
+- Renders the pre-installation confirmation summary and the
+  post-installation transaction result. `[checked by: Boundary]`
+- Renders one-line category and preset summaries, used by Bootstrap's
+  onboarding wizard and the CLI's preset-listing output. `[checked by:
+  Boundary]`
+
+**Consumes.**
+- Catalog application and preset data, via Catalog's accessors only.
+  `[checked by: Encapsulation]`
+- Compatibility, installed-status, and current-selection-membership
+  determinations, via Selection's accessors only. `[checked by:
+  Encapsulation]`
+- The raw Installation Plan and raw Transaction state, read directly, not
+  through an accessor. `[checked by: Encapsulation]`
+- The hardware-recommended application list `Deployment.Menu` itself
+  caches, read directly from Menu's own module-level variable, not
+  through an accessor Menu exposes. `[checked by: Encapsulation]`
+- The real machine family and external-display status, at render time.
+  `[checked by: Platform]`
+
+**Produces.**
+- Every rendered screen and one-line summary named in Responsibilities —
+  text output no other module relies on for its own correctness. A caller
+  that composes this output into its own display line (`Deployment`'s CLI
+  dispatch, Bootstrap's onboarding wizard) treats it as opaque text to
+  embed, never inspecting or branching on its content.
+- Derived, view-only comparisons it computes for display — a plan's diff
+  against its source preset, hardware-recommended applications not in the
+  current selection — recomputed fresh on every render, never stored.
+  `[checked by: Boundary]`
+
+**Collaborates With.**
+- `Deployment.Catalog`: reads application and preset data exclusively
+  through its accessors. `[checked by: Dependency]`
+- `Deployment.Selection`: reads compatibility, installed-status, and
+  selection-membership determinations exclusively through its accessors.
+  `[checked by: Dependency]`
+- `Deployment.Menu`: calls this module's Application Detail renderer
+  directly to show one item; this module also reads Menu's own
+  hardware-recommendation cache directly within that same call, not
+  through an accessor. `[checked by: Dependency]`
+- `Deployment.Planner`: is the source of the raw Installation Plan state
+  read directly throughout this module — the explain, tree, summary, and
+  confirmation renderers all read `PLAN_*` state with no accessor.
+  `[checked by: Dependency]`
+- `Deployment.Confirm`: calls this module's confirmation, full-explanation,
+  and diff-tree renderers directly, depending on technician input.
+  `[checked by: Dependency]`
+- `Deployment.Installer`: calls this module's transaction-result renderer
+  directly after an installation attempt. `[checked by: Dependency]`
+- `Deployment.Transaction`: is the source of the raw Transaction state read
+  directly by the transaction-result renderer. `[checked by: Dependency]`
+- `Deployment`: calls this module's preset-summary, plan-explanation,
+  plan-tree, and plan-summary renderers directly from CLI dispatch,
+  outside any interactive screen. `[checked by: Dependency]`
+- `Bootstrap`: calls this module's category and preset-summary renderers
+  directly, from the onboarding wizard's own preset-picker screen; this
+  module also calls directly into Bootstrap's hardware-detection function
+  when computing hardware-recommended-but-unselected applications.
+  `[checked by: Dependency]`
+
+**Constraints.**
+- Never mutates shared state — no module-owned global anywhere in the
+  system is assigned from this file. `[checked by: State]`
+- Never independently determines compatibility, installed status, or
+  selection membership — every such fact is read from the module that
+  owns it, never recomputed here. `[checked by: Boundary]`
+- Never persists a derived comparison it computes for display — recomputed
+  fresh on every render, never cached in shared state. `[checked by:
+  Boundary]`
+
+**Defined By.** `docs/Deployment-Architecture.md`, "Layer responsibilities"
+table, Renderer row (current, prose form) — pending migration to this
+standard.
+
+---
+
+**No interaction with the Storage Platform found.** The task that produced
+this draft specifically named `Platform` as an area warranting attention.
+None was found: `core/deployment/render.sh` contains no reference to
+`core/platform/` anywhere. This Contract records that absence rather than
+inventing a relationship to satisfy the brief.
+
+**A raw read this Contract can name, but not fix.** `render_application_detail`
+reads `$CATALOG_MENU_HW_IDS` directly — a bare module-level variable
+`core/deployment/menu.sh` defines and populates for its own use (`menu.sh`'s
+own comment: "cached once per `run_application_catalog` call"), not an
+accessor Menu exposes. This Contract records the read on `Deployment.Renderer`'s
+side, in both `Consumes` and `Collaborates With`, because it is real and
+evidenced. It also means `Deployment.Menu`'s own adopted Contract (§7) —
+which lists no matching `Produces` claim and no `Deployment.Renderer` entry
+under `Collaborates With` — is silent about this same fact from its own
+side. This task's restrictions permit recording the asymmetry; they do not
+permit correcting it, since doing so would mean modifying an adopted
+Module Contract.
