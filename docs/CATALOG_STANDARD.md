@@ -3,7 +3,7 @@
 The normative metadata schema for `catalog/applications/<id>/app.conf`, as
 of v2.3.0. This document defines *what fields exist and what they mean*;
 [Catalog-Format.md](Catalog-Format.md) is the complete parsing/validation
-reference (file conventions, the preset format, the full V1–V11 rule table).
+reference (file conventions, the preset format, the full V1–V12 rule table).
 [CATALOG_CONSTITUTION.md](CATALOG_CONSTITUTION.md) is the philosophy behind
 why the schema looks like this.
 

@@ -1,7 +1,7 @@
 # JB Toolkit — Engineering Documentation
 
 This directory is the official engineering reference for JB Toolkit. It describes the
-architecture **as implemented today** (v2.3.0). It is written for future
+architecture **as implemented today** (v2.4.1). It is written for future
 contributors and AI assistants who need to understand, maintain, or extend the project
 without reverse-engineering it from source.
 
@@ -26,8 +26,9 @@ without reverse-engineering it from source.
 | [CATALOG_CONSTITUTION.md](CATALOG_CONSTITUTION.md) | The catalog's long-term philosophy — 10 principles behind why it's curated the way it is |
 | [CATALOG_STANDARD.md](CATALOG_STANDARD.md) | The metadata quality standard: required/optional fields, category enum, license vocabulary |
 | [Storage-Architecture.md](Storage-Architecture.md) | The Storage Platform service: Adopted Data Volumes, the generic scan/plan/execute/verify/rollback/commit pipeline, the public `storage::*` API, and the profile contract future migration profiles implement |
-| [architecture/](architecture/) | Architecture Decision Records — the *why* behind the Platform layer, one topic per file, written for readers who won't read the implementation |
+| [architecture/](architecture/) | Architecture Decision Records — the *why* behind architectural decisions across the toolkit (Platform, Catalog, Deployment, Terminal UI), one topic per file, written for readers who won't read the implementation |
 | [release-policy.md](release-policy.md) | Versioning strategy, the Release Candidate process, Architecture Freeze, and the release checklist |
+| [engineering/](engineering/) | The Engineering Governance Layer — how the project engineers itself: principles, verification standard, roles, the verification program, and templates. Start at [engineering/README.md](engineering/README.md) |
 
 See also, at the repository root: [CHANGELOG.md](../CHANGELOG.md) (what
 changed, release by release) and [RELEASE_v2.2.2.md](../RELEASE_v2.2.2.md)
