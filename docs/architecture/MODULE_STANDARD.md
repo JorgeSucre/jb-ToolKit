@@ -898,3 +898,91 @@ hardware recommendations never enter the Selected Applications set this
 module reads (a design invariant stated in `selection.sh`'s own header,
 carried forward here rather than re-verified). This Contract records that
 absence rather than inventing a relationship to satisfy the brief.
+
+## 12. Migration draft: `Deployment.Confirm`
+
+**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
+adopted; `Deployment.Selection` and `Deployment.Planner` have completed the
+correct-then-verify cycle. `Deployment.Confirm` is the next migration
+candidate. This Contract describes `core/deployment/confirm.sh` (55 lines,
+one function) as it exists today. No Boundary Verification has been
+executed against it; it is not canonical until one has been.
+
+---
+
+### Deployment.Confirm
+
+**Purpose.** The interactive review loop between a frozen Installation
+Plan and actually installing it — lets a technician inspect the plan
+before committing, and navigate toward an installation attempt or away
+from one, without making the installation-commit decision itself.
+
+**Responsibilities.**
+- Runs the interactive review loop: renders the confirmation summary each
+  iteration, and dispatches to a full plan explanation, a preset-diff
+  tree, or an installation attempt, by technician choice. `[checked by:
+  Boundary]`
+- Keeps the review loop open after an installation attempt that was
+  blocked or cancelled at the Installer's own gate, and ends it only when
+  a technician backs out or an installation attempt actually ran to
+  completion. `[checked by: Boundary]`
+
+**Consumes.**
+- Whether a plan is ready, read directly, not through an accessor.
+  `[checked by: Encapsulation]`
+- The outcome of the most recent installation attempt, read directly, not
+  through an accessor. `[checked by: Encapsulation]`
+
+**Produces.**
+- No durable artifact: this module owns no state of its own, writes no
+  file, and its return value is discarded by its only caller. Its only
+  effect on the rest of the system is the sequence of calls it makes into
+  other modules, already recorded under Collaborates With.
+
+**Collaborates With.**
+- `Deployment.Menu`: is called by it to hand off to this screen once a
+  plan exists; this module does not know how the plan was built. `[checked
+  by: Dependency]`
+- `Deployment.Planner`: reads whether a plan is ready directly, not
+  through an accessor. `[checked by: Dependency]`
+- `Deployment.Renderer`: calls three distinct rendering functions
+  directly — the confirmation summary, the full plan explanation, and the
+  preset-diff tree — depending on technician input. `[checked by:
+  Dependency]`
+- `Deployment.Installer`: calls its installation entry point directly when
+  the technician chooses to install; the actual go/no-go gate before any
+  system change happens inside that call, not here. `[checked by:
+  Dependency]`
+- `Deployment.Transaction`: reads the outcome of the most recent
+  installation attempt directly, not through an accessor, to decide
+  whether to keep the review loop open. `[checked by: Dependency]`
+
+**Constraints.**
+- Does not own the installation-commit decision — the y/n gate before any
+  system change happens inside `Deployment.Installer`'s own entry point,
+  not here. `[checked by: Boundary]`
+- Owns no state of its own — every fact it reads belongs to another
+  module, and it writes nothing. `[checked by: State]`
+- Renders only its own static control menu and input prompt directly;
+  every presentation of Plan data shown from this loop — the confirmation
+  summary, the full plan explanation, the preset-diff tree — is produced
+  by `Deployment.Renderer`, never recomputed or reformatted here. `[checked
+  by: Boundary]`
+
+**Defined By.** `docs/Deployment-Architecture.md`, "Layer responsibilities"
+table, Menus row (current, prose form — `confirm.sh` is documented jointly
+with `menu.sh` there, not as its own row) — pending migration to this
+standard.
+
+---
+
+**A name that outruns what the module owns.** The task that produced this
+draft asked whether `Deployment.Confirm` owns, validates, merely presents,
+or coordinates decisions. The evidence points to the last: the module
+named "Confirm" does not itself confirm anything — the actual y/n gate
+before any system change happens inside `Deployment.Installer`
+(`run_plan_installation`'s own `ask_yes_no` call), a fact `confirm.sh`'s
+own header comment already states plainly ("a y/n gate inside
+`run_plan_installation` is the last stop before the system changes").
+This Contract records that as architectural reality rather than assuming
+the name describes the ownership.
