@@ -240,6 +240,32 @@ checking for that becomes a matter of collecting every `Produces` list in
 the repository and looking for a duplicate, not re-deriving ownership from
 scratch per concept the way Verification 0001 currently has to.
 
+A `Produces` claim is defined by architectural dependency, not by design
+intent. The test is whether another module actually relies on the fact for
+its own correctness — regardless of whether the module stating the claim
+ever meant to expose it, and regardless of how cleanly the fact was
+exposed. This covers three cases identically: an output the module was
+built to provide, a dependency that emerged only because another module
+started relying on something it observed, and an outright leak the
+producing module never intended at all. All three are the same kind of
+fact from `Produces`' point of view — something real that another module's
+correctness now depends on — and the model records them the same way.
+
+Recording such a claim states that the dependency exists; it does not
+state that the dependency is sound. `Deployment.Selection`'s Selected
+Applications output (§10, draft) is the concrete case: `Deployment.Planner`'s
+own correctness depends on details of that output nothing ever designed as
+a public contract. Leaving that dependency out of `Produces` because it was
+never intended would hide precisely the kind of fact this model exists to
+make visible — the same failure mode `Deployment.Menu`'s first Boundary
+Verification already found once, when three real collaborators were
+missing from its `Collaborates With` list for the identical reason: a real
+relationship that existed in the system but nowhere in the Contract
+describing it. Whether a recorded dependency represents a sound
+architectural relationship or a violation is a question for the
+appropriate Engineering Verification to answer, tagged accordingly — never
+a judgment the Contract makes on its own by choosing what to include.
+
 ### Collaborates With
 
 **Answers:** which other modules does this module have a structural
@@ -656,3 +682,210 @@ not included, because no real document states it — and Platform's own
 something were missing. That is the model working as designed: an
 unstated rule stays honestly absent instead of being smuggled back in
 just because this exercise had a natural place to put it.
+
+## 10. Migration draft: `Deployment.Selection`
+
+**Status: first draft, not verified, not adopted.** ADR-0013 adopted the
+Module Contract model and `Deployment.Menu`'s Contract as its first
+migrated module; `Deployment.Selection` is the next migration candidate.
+This Contract describes `core/deployment/selection.sh` as it exists today.
+It has not yet been through the correct-then-verify cycle
+`Deployment.Menu`'s Contract went through before adoption (see ADR-0013,
+Context) — no Boundary Verification has been executed against it, and it
+is not canonical until one has been.
+
+---
+
+### Deployment.Selection
+
+**Purpose.** The single owner of the Selected Applications set — one
+record per chosen application regardless of whether it entered via a
+preset or a manual toggle — and of the two per-application questions
+("can this be installed here," "is this already installed") every other
+module needs answered identically.
+
+**Responsibilities.**
+- Owns the Selected Applications set: adds, removes, and toggles
+  membership by request, with no separate representation for
+  preset-sourced versus manually-toggled entries. `[checked by: Boundary]`
+- Determines, for a given application, whether it is compatible with this
+  machine (`ARCHS`, `MIN_MACOS`). `[checked by: Boundary]`
+- Determines, for a given application, whether it is already installed,
+  checked the same way for every caller. `[checked by: Boundary]`
+- Loads a preset's application list, replacing the current selection
+  wholesale, and records every requested application that is incompatible
+  with this machine instead of dropping it silently. `[checked by:
+  Boundary]`
+
+**Consumes.**
+- Catalog application data (`ARCHS`, `MIN_MACOS`, `INSTALL_METHOD`,
+  `PACKAGE_NAME`, `NAME`), via Catalog's accessors only. `[checked by:
+  Encapsulation]`
+- A preset's application list, via Catalog's preset accessors only.
+  `[checked by: Encapsulation]`
+- The real macOS version and processor architecture, at the time
+  compatibility is determined. `[checked by: Platform]`
+- The session-level Homebrew formula/cask list cache, at the time
+  installed status is determined. `[checked by: Platform]`
+
+**Produces.**
+- Updates to the Selected Applications set, through its own add/remove/
+  toggle functions.
+- The raw Selected Applications representation and the raw preset-skip
+  representation, both read directly by `Deployment.Planner` when
+  freezing a plan — not through an accessor. `[checked by: Encapsulation]`
+- A compatibility determination for a given application (yes/no, plus a
+  Spanish-language reason when incompatible).
+- An installed-status determination for a given application.
+
+**Collaborates With.**
+- `Deployment.Menu`: calls this module's add/remove/toggle, count, reset,
+  compatibility, installed-status, and preset-loading functions — all
+  through its own functions, never a raw representation. `[checked by:
+  Dependency]`
+- `Deployment.Renderer`: calls the membership, installed-status, and
+  compatibility functions directly, for the same reasons Menu does.
+  `[checked by: Dependency]`
+- `Deployment.Planner`: reads the raw Selected Applications and preset-skip
+  representations directly, not through an accessor, when freezing a
+  plan. `[checked by: Dependency]`
+- `Deployment`: calls the preset-loading function directly, outside any
+  interactive screen, when resolving a preset from the command line.
+  `[checked by: Dependency]`
+
+**Constraints.**
+- An application already in the selection is never re-added on a
+  duplicate add — first-occurrence provenance wins. `[checked by:
+  Boundary]`
+- Provenance is opaque display data; nothing that reads it branches
+  control flow on its value. `[checked by: Boundary]`
+- Does not classify applications into automatic/manual install tracks or
+  determine install method — membership and compatibility only; track
+  classification belongs to the Planner. `[checked by: Boundary]`
+
+**Defined By.** `docs/Deployment-Architecture.md`, "Layer responsibilities"
+table, Selection row (current, prose form) — pending migration to this
+standard.
+
+---
+
+## 11. Migration draft: `Deployment.Planner`
+
+**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
+adopted (ADR-0013); `Deployment.Selection` has a first draft (§10).
+`Deployment.Planner` is the next migration candidate. This Contract
+describes `core/deployment/planner.sh` as it exists today, built the same
+way §10 was: every field checked against real call sites, not against what
+the module's own header comments say it should do. No Boundary
+Verification has been executed against it; it is not canonical until one
+has.
+
+---
+
+### Deployment.Planner
+
+**Purpose.** The single decision-making layer between what a technician
+selected and what gets installed — classifies the Selected Applications
+set into automatic and manual install tracks, and freezes that
+classification into an Installation Plan every downstream layer consumes
+without re-deciding anything.
+
+**Responsibilities.**
+- Classifies each selected application into the automatic (`brew`/`cask`)
+  or manual (`mas`/`pkg`/`dmg`/`manual`) install track, by `INSTALL_METHOD`.
+  `[checked by: Boundary]`
+- Counts JB Picks within the plan. `[checked by: Boundary]`
+- Freezes the current Selected Applications set, and the applications a
+  loaded preset wanted but that were incompatible with this machine, into
+  one Installation Plan — a snapshot, not a live view of the selection.
+  `[checked by: Boundary]`
+- Exports the current plan to a persisted, human-readable file. `[checked
+  by: Boundary]`
+
+**Consumes.**
+- The raw Selected Applications representation and the raw preset-skip
+  representation, read directly, not through an accessor. `[checked by:
+  Encapsulation]`
+- Catalog application data (`NAME`, `INSTALL_METHOD`, `PACKAGE_NAME`,
+  `DOWNLOAD_URL`, `JB_PICK`), via Catalog's accessors only. `[checked by:
+  Encapsulation]`
+- A preset's identity and display name, via Catalog's preset accessors
+  only — used solely to label the plan, never to determine its membership.
+  `[checked by: Encapsulation]`
+- The real macOS version and processor architecture, at the time a plan is
+  built. `[checked by: Platform]`
+
+**Produces.**
+- The Installation Plan itself: exposed as directly-read global state, not
+  through accessor functions — documented in this module's own header
+  comment as the contract every downstream layer consumes, and read
+  directly by `Deployment.Renderer`, `Deployment.Confirm`,
+  `Deployment.Installer`, `Deployment.Transaction`, and `Bootstrap` alike.
+  `[checked by: Encapsulation]`
+- A persisted plan file, through its own export function.
+- A record of the most recent exported plan, written into the shared
+  session state store. `[checked by: State]`
+
+**Collaborates With.**
+- `Deployment.Selection`: reads the raw Selected Applications and
+  preset-skip representations directly, not through an accessor. `[checked
+  by: Dependency]`
+- `Deployment.Catalog`: reads application and preset data exclusively
+  through its accessors. `[checked by: Dependency]`
+- `Deployment.Menu`: is called by it to freeze the current selection into
+  a plan. `[checked by: Dependency]`
+- `Deployment`: is called by it directly — both to build a plan and to
+  export one — when resolving a preset from the command line, outside any
+  interactive screen. `[checked by: Dependency]`
+- `Deployment.Renderer`: reads the plan's raw global state directly, not
+  through an accessor, to render every plan-related screen. `[checked by:
+  Dependency]`
+- `Deployment.Confirm`: reads whether a plan is ready directly, not
+  through an accessor, before showing the confirmation screen. `[checked
+  by: Dependency]`
+- `Deployment.Installer`: calls this module's export function directly,
+  and separately reads the plan's raw global state directly, to execute
+  it. `[checked by: Dependency]`
+- `Deployment.Transaction`: reads the plan's raw global state directly,
+  not through an accessor, when beginning a transaction. `[checked by:
+  Dependency]`
+- `Bootstrap`: reads one plan field directly, not through an accessor, to
+  report the outcome of the deployment step after the onboarding wizard
+  completes. `[checked by: Dependency]`
+
+**Constraints.**
+- Does not modify the system — builds and freezes a plan only; execution,
+  transactions, and reporting happen downstream. `[checked by: Boundary]`
+- Does not resolve preset membership, application bundles, or catalog
+  categories — by the time the Selected Applications set is read,
+  membership is already final. `[checked by: Boundary]`
+- Never uses the preset identifier to re-derive plan membership — the
+  Selected Applications set alone determines which applications are in the
+  plan; the preset identifier is recorded only as display metadata.
+  `[checked by: Boundary]`
+- Provenance recorded in the plan's application records is opaque display
+  text — the classification logic never branches on it. `[checked by:
+  Boundary]`
+
+**Defined By.**
+- Layer boundary — what this module does and does not decide:
+  `docs/Deployment-Architecture.md`, "Layer responsibilities" table,
+  Planner row.
+- The Installation Plan's own data contract — what each plan field means:
+  `docs/Deployment-Architecture.md`, "The two contracts" §
+  "Installation Plan."
+
+Two aspects, one document, each a different section — pending migration to
+this standard, the same transitional form §7's `Deployment.Menu` entry
+uses.
+
+---
+
+**No interaction with hardware detection found.** The task that produced
+this draft specifically named Hardware detection as an area warranting
+attention. None was found: `core/deployment/planner.sh` never calls
+`detect_machine_family` or any hardware-recommendation function, and
+hardware recommendations never enter the Selected Applications set this
+module reads (a design invariant stated in `selection.sh`'s own header,
+carried forward here rather than re-verified). This Contract records that
+absence rather than inventing a relationship to satisfy the brief.
