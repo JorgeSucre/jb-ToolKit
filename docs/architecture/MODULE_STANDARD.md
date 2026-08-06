@@ -710,8 +710,11 @@ module needs answered identically.
   preset-sourced versus manually-toggled entries. `[checked by: Boundary]`
 - Determines, for a given application, whether it is compatible with this
   machine (`ARCHS`, `MIN_MACOS`). `[checked by: Boundary]`
-- Determines, for a given application, whether it is already installed,
-  checked the same way for every caller. `[checked by: Boundary]`
+- Determines, for a given application, whether it is already installed.
+  `Deployment.Menu` and `Deployment.Renderer` call this determination
+  directly; `Deployment.Installer` computes the identical check through
+  its own independent implementation, not through this module. `[checked
+  by: Boundary]`
 - Loads a preset's application list, replacing the current selection
   wholesale, and records every requested application that is incompatible
   with this machine instead of dropping it silently. `[checked by:
@@ -739,10 +742,11 @@ module needs answered identically.
 - An installed-status determination for a given application.
 
 **Collaborates With.**
-- `Deployment.Menu`: calls this module's add/remove/toggle, count, reset,
-  compatibility, installed-status, and preset-loading functions — all
-  through its own functions, never a raw representation. `[checked by:
-  Dependency]`
+- `Deployment.Menu`: calls this module's toggle, count, reset,
+  compatibility, installed-status, and preset-loading functions —
+  membership is mutated only through toggle, which performs add/remove
+  internally; Menu never calls add or remove directly, and never touches a
+  raw representation. `[checked by: Dependency]`
 - `Deployment.Renderer`: calls the membership, installed-status, and
   compatibility functions directly, for the same reasons Menu does.
   `[checked by: Dependency]`
@@ -757,8 +761,13 @@ module needs answered identically.
 - An application already in the selection is never re-added on a
   duplicate add — first-occurrence provenance wins. `[checked by:
   Boundary]`
-- Provenance is opaque display data; nothing that reads it branches
-  control flow on its value. `[checked by: Boundary]`
+- Provenance is opaque to installation decisions — no module uses it to
+  classify, filter, or select applications; `Deployment.Planner`'s
+  automatic/manual classification switches on `INSTALL_METHOD` only. It is
+  not opaque to every reader: `Deployment.Renderer` branches on the
+  provenance value directly, to choose which human-readable label to
+  display (a preset's name, or plain "manual selection"). `[checked by:
+  Boundary]`
 - Does not classify applications into automatic/manual install tracks or
   determine install method — membership and compatibility only; track
   classification belongs to the Planner. `[checked by: Boundary]`
