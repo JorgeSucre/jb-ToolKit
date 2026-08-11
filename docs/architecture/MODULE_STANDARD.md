@@ -1110,3 +1110,137 @@ under `Collaborates With` — is silent about this same fact from its own
 side. This task's restrictions permit recording the asymmetry; they do not
 permit correcting it, since doing so would mean modifying an adopted
 Module Contract.
+
+## 14. Migration draft: `Deployment.Installer`
+
+**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
+adopted; `Deployment.Selection`, `Deployment.Planner`, `Deployment.Confirm`,
+and `Deployment.Renderer` have completed the correct-then-verify cycle.
+`Deployment.Installer` is the next migration candidate. This Contract
+describes `core/deployment/install.sh` (276 lines, 5 functions) as it
+exists today. No Boundary Verification has been executed against it; it is
+not canonical until one has been.
+
+---
+
+### Deployment.Installer
+
+**Purpose.** Executes an already-frozen Installation Plan verbatim —
+installs automatic-track packages via Homebrew, verifies manual-track
+applications' presence, and records exactly what happened as an
+Installation Transaction — while owning the runtime decisions of whether
+to proceed and what the outcome was, decisions the Plan itself cannot make
+in advance because they depend on facts only available at execution time.
+
+**Responsibilities.**
+- Executes the Plan's automatic-track packages via Homebrew, one at a
+  time, with retry, never letting one package's failure stop the rest.
+  `[checked by: Boundary]`
+- Determines the real starting state of every plan record at execution
+  time — already installed, pending, or requiring manual action —
+  independently re-verified against Homebrew and the filesystem, never
+  trusted from the Plan's own records. `[checked by: Boundary]`
+- Gates execution behind two runtime confirmations — whether to proceed
+  with the plan at all, and whether to continue past any packages found
+  unavailable — deciding, at each gate, whether to record a cancellation
+  and stop, or continue. `[checked by: Boundary]`
+- Classifies the deployment's final outcome (success, partial, or failed)
+  from the count of confirmed failures after execution completes.
+  `[checked by: Boundary]`
+
+**Consumes.**
+- The raw Installation Plan state — readiness, preset identity, and both
+  track lists — read directly, not through an accessor. `[checked by:
+  Encapsulation]`
+- The real-time Homebrew formula/cask index and installed-package list, at
+  multiple points during execution. `[checked by: Platform]`
+- The real filesystem state of `/Applications`, to verify manual-track
+  presence. `[checked by: Platform]`
+
+**Produces.**
+- Most of the Installation Transaction's outcome content — attempted,
+  installed, already-present, manual, and failed counts, their per-app
+  records, and the cancellation flag — written directly into
+  `Deployment.Transaction`'s own global namespace, not through any
+  function that module exposes for this content. `[checked by:
+  Encapsulation]`
+- Real, verified changes to installed software on the machine — the sole
+  owner of executing Homebrew installations derived from the Installation
+  Plan. (`core/bootstrap/brew.sh` also issues `brew install` directly, for
+  the Toolkit's own infrastructure — a different responsibility, installing
+  outside any Plan, not a second owner of this one.) `[checked by:
+  Boundary]`
+- Five keys written directly into the shared session state store (deployed
+  preset, last deployment timestamp, installed/manual/failed counts).
+  `[checked by: State]`
+
+**Collaborates With.**
+- `Deployment.Planner`: is the source of the raw Plan state read
+  throughout — readiness, preset identity, and both track lists — with no
+  accessor; separately, calls its plan-export function directly, exactly
+  once per invocation, at whichever of two branch points is reached —
+  proceeding past the first runtime gate, or cancelling at it — before
+  beginning a transaction either way. `[checked by: Dependency]`
+- `Deployment.Transaction`: calls its lifecycle functions (begin, finish,
+  export) to bracket a transaction, separately writes most of that
+  transaction's outcome content directly into its global namespace, not
+  through any function `Deployment.Transaction` exposes for that content,
+  and reads one field back the same way — the transaction's end
+  timestamp, to build its own state-store entry. `[checked by:
+  Dependency]`
+- `Deployment.Renderer`: calls its transaction-result renderer directly to
+  show the outcome, once the transaction is recorded. `[checked by:
+  Dependency]`
+- `Deployment.Confirm`: is called by it — the only external caller of this
+  module's entry point. `[checked by: Dependency]`
+- `Bootstrap`: calls directly into `core/bootstrap/ui.sh` for its entire
+  interactive and status-reporting surface — confirmation prompts
+  (`ask_yes_no`), section headers (`print_section`), and every outcome
+  message (success, warning, error, and informational) it shows the
+  technician — none through an accessor. `[checked by: Dependency]`
+
+**Constraints.**
+- Never reads the catalog — every field it needs (name, install method,
+  package identifier) already exists in the Plan's own records. `[checked
+  by: Boundary]`
+- Never decides which applications belong in the plan, and never
+  reclassifies an application's install track — both are frozen by the
+  time this module runs; it only determines, at execution time, whether an
+  already-classified record is already satisfied, executable, or requires
+  a manual step. `[checked by: Boundary]`
+- Never proceeds past either runtime gate silently — a cancellation at
+  either one is always recorded as a transaction outcome, never a silent
+  return. `[checked by: Boundary]`
+
+**Defined By.** `docs/Deployment-Architecture.md`, "Layer responsibilities"
+table, Installer row (current, prose form) — pending migration to this
+standard.
+
+---
+
+**No rollback capability found.** The task that produced this draft
+specifically named rollback as an area warranting attention. None was
+found: a package that fails to verify after an install attempt is recorded
+as a named failure; nothing already installed by an earlier step in the
+same run is undone. This Contract records that absence rather than
+inventing a capability to satisfy the brief.
+
+**A "no decisions" claim this Contract cannot repeat.** Both
+`core/deployment/install.sh`'s own header comment ("This layer makes NO
+decisions") and `Deployment-Architecture.md`'s Installer row ("Explicitly
+NOT its job: Decisions of any kind") state a broader claim than the
+implementation supports. The evidence is direct: `run_plan_installation`
+contains two real `ask_yes_no` gates governing whether execution proceeds
+at all, and a real classification of the deployment's aggregate outcome
+(success, partial, or failed) computed from a failure count after
+execution. Neither gate nor the outcome classification could exist earlier
+in the pipeline — both depend on facts (live Homebrew availability, actual
+install-command results) that do not exist until this module runs. What
+the evidence does support, precisely, is narrower than "no decisions":
+this module never decides *what* belongs in the plan, and never
+reclassifies an application's install track — both are frozen before it
+runs. This is the same shape of finding that motivated this model in the
+first place (§2's Menu example: "must not filter," contradicted by real
+filtering code) — a broad prose exclusion standing in for a narrower rule
+that was actually true, until nobody re-checked it against the code it
+described.
