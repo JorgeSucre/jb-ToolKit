@@ -18,6 +18,7 @@ source "$BASE_DIR/core/bootstrap/ui.sh"
 source "$BASE_DIR/core/bootstrap/stages.sh"
 source "$BASE_DIR/core/bootstrap/brew.sh"
 source "$BASE_DIR/core/bootstrap/hardware.sh"
+source "$BASE_DIR/core/bootstrap/toolchain.sh"
 
 # Deployment library — Bootstrap's software step consumes the same
 # catalog, planner, and installer as the Deployment module. Bootstrap
@@ -39,34 +40,14 @@ print_banner
 check_internet_connection || exit 1
 
 print_section "🛠️ Preparando herramientas base"
-log "🛠️ Verificando Command Line Tools..."
-
-install_clt() {
-
-    if xcode-select -p &>/dev/null; then
-        log "✔ CLT ya instaladas"
-        return 0
-    fi
-
-    log "📦 Intentando instalar CLT..."
-    xcode-select --install 2>/dev/null || true
-
-    for i in {1..60}; do
-
-        if xcode-select -p &>/dev/null; then
-            log "✔ CLT instaladas correctamente"
-            return 0
-        fi
-
-        sleep 5
-    done
-
-    log "❌ CLT no se instalaron automáticamente"
-    return 1
-}
+log "🛠️ Verificando compatibilidad de macOS y Command Line Tools..."
 
 print_stage "Verificando herramientas base"
-install_clt || log "⚠️ Continuando sin CLT (brew puede fallar)"
+
+if ! prepare_toolchain; then
+    print_completion "false"
+    exit 1
+fi
 
 HAS_SUDO=0
 
