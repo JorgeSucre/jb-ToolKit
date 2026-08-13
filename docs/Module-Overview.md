@@ -36,15 +36,33 @@ launch/exit and survives module failures. `chmod +x`es core scripts defensively.
 ## Bootstrap subsystem
 
 ### `core/bootstrap.sh` — Orchestrator
-Linear setup flow with 5 staged sections and hard abort points: base tools (CLT,
-Homebrew), Homebrew configuration (indexes, verified fastfetch install, pending
-updates), hardware detection, the onboarding wizard, and finalization. Sources the
-**Deployment library** (`core/deployment/*`) so the wizard uses the same catalog,
-planner, and installer as the Deployment module. Also defines `install_clt`
-(Command Line Tools with 5-minute polling) and the admin-rights check.
+Linear setup flow with 5 staged sections and hard abort points:
+environment-aware toolchain preparation followed by Homebrew installation
+(`prepare_toolchain`, `core/bootstrap/toolchain.sh` — a fatal prerequisite;
+Bootstrap exits before Homebrew is ever touched if it fails), Homebrew
+configuration (indexes, verified fastfetch install, pending updates),
+hardware detection, the onboarding wizard, and finalization. Sources the
+**Deployment library** (`core/deployment/*`) so the wizard uses the same
+catalog, planner, and installer as the Deployment module. Also defines the
+admin-rights check.
 
 ### `core/bootstrap/stages.sh`
 `print_stage` — `[n/TOTAL]` progress header with previous-stage elapsed time.
+
+### `core/bootstrap/toolchain.sh`
+`prepare_toolchain` — resolves the detected macOS version against the
+patch-band matrix in `core/bootstrap/toolchain-matrix.conf`
+(`resolve_toolchain_section`), applies the matched row's `TOOLKIT_STRATEGY`
+(`proceed`/`proceed_with_warning`/`proceed_with_caution`/`stop`), checks
+any `ARCH_CONSTRAINT`, then behaviorally validates the row's
+`CAPABILITY_PROFILE` (`validate_capability_profile` — each required
+command must exist and run `--version` successfully, not just be present),
+installing Command Line Tools (`install_clt`, relocated here from
+`bootstrap.sh`, unchanged 5-minute polling) and re-validating if the
+profile isn't already satisfied. Apple's own Xcode/CLT compatibility
+window (`APPLE_XCODE_MIN`/`MAX`) is informational only, never an install
+target or a pass/fail gate — see
+[ADR-0014](architecture/0014-toolchain-compatibility-matrix.md).
 
 ### `core/bootstrap/brew.sh`
 `check_internet_connection`, `install_brew` (3 attempts, official installer,

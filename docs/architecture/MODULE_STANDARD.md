@@ -685,14 +685,11 @@ just because this exercise had a natural place to put it.
 
 ## 10. Migration draft: `Deployment.Selection`
 
-**Status: first draft, not verified, not adopted.** ADR-0013 adopted the
-Module Contract model and `Deployment.Menu`'s Contract as its first
-migrated module; `Deployment.Selection` is the next migration candidate.
-This Contract describes `core/deployment/selection.sh` as it exists today.
-It has not yet been through the correct-then-verify cycle
-`Deployment.Menu`'s Contract went through before adoption (see ADR-0013,
-Context) — no Boundary Verification has been executed against it, and it
-is not canonical until one has been.
+**Status: adopted.** Per ADR-0013 ("Adoption is incremental, module by
+module"), this Contract completed the adoption sequence: drafted,
+independently Boundary-Verified, corrected against the findings that
+verification produced, and re-verified — 19/19 claims verified. See
+`docs/engineering/verification/0003-boundary-verification-deployment-selection-corrected.md`.
 
 ---
 
@@ -780,14 +777,11 @@ standard.
 
 ## 11. Migration draft: `Deployment.Planner`
 
-**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
-adopted (ADR-0013); `Deployment.Selection` has a first draft (§10).
-`Deployment.Planner` is the next migration candidate. This Contract
-describes `core/deployment/planner.sh` as it exists today, built the same
-way §10 was: every field checked against real call sites, not against what
-the module's own header comments say it should do. No Boundary
-Verification has been executed against it; it is not canonical until one
-has.
+**Status: adopted.** Per ADR-0013 ("Adoption is incremental, module by
+module"), this Contract completed the adoption sequence: drafted and
+independently Boundary-Verified, with zero contradictions found on the
+first pass — 24/24 claims verified, no correction required. See
+`docs/engineering/verification/0003-boundary-verification-deployment-planner.md`.
 
 ---
 
@@ -901,12 +895,11 @@ absence rather than inventing a relationship to satisfy the brief.
 
 ## 12. Migration draft: `Deployment.Confirm`
 
-**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
-adopted; `Deployment.Selection` and `Deployment.Planner` have completed the
-correct-then-verify cycle. `Deployment.Confirm` is the next migration
-candidate. This Contract describes `core/deployment/confirm.sh` (55 lines,
-one function) as it exists today. No Boundary Verification has been
-executed against it; it is not canonical until one has been.
+**Status: adopted.** Per ADR-0013 ("Adoption is incremental, module by
+module"), this Contract completed the adoption sequence: drafted,
+independently Boundary-Verified, corrected against the contradiction
+verification found, and re-verified — 13/13 claims verified. See
+`docs/engineering/verification/0003-boundary-verification-deployment-confirm-corrected.md`.
 
 ---
 
@@ -989,13 +982,11 @@ the name describes the ownership.
 
 ## 13. Migration draft: `Deployment.Renderer`
 
-**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
-adopted; `Deployment.Selection`, `Deployment.Planner`, and
-`Deployment.Confirm` have completed the correct-then-verify cycle.
-`Deployment.Renderer` is the next migration candidate. This Contract
-describes `core/deployment/render.sh` (471 lines, 14 functions) as it
-exists today. No Boundary Verification has been executed against it; it is
-not canonical until one has been.
+**Status: adopted.** Per ADR-0013 ("Adoption is incremental, module by
+module"), this Contract completed the adoption sequence: drafted,
+independently Boundary-Verified, corrected against the ambiguous claim
+verification found, and re-verified — 23/23 claims verified. See
+`docs/engineering/verification/0003-boundary-verification-deployment-renderer-corrected.md`.
 
 ---
 
@@ -1113,13 +1104,12 @@ Module Contract.
 
 ## 14. Migration draft: `Deployment.Installer`
 
-**Status: first draft, not verified, not adopted.** `Deployment.Menu` is
-adopted; `Deployment.Selection`, `Deployment.Planner`, `Deployment.Confirm`,
-and `Deployment.Renderer` have completed the correct-then-verify cycle.
-`Deployment.Installer` is the next migration candidate. This Contract
-describes `core/deployment/install.sh` (276 lines, 5 functions) as it
-exists today. No Boundary Verification has been executed against it; it is
-not canonical until one has been.
+**Status: adopted.** Per ADR-0013 ("Adoption is incremental, module by
+module"), this Contract completed the adoption sequence: drafted,
+independently Boundary-Verified across three correction cycles as each
+pass found a real coverage gap, and re-verified — 18/18 claims verified,
+cycle closed. See
+`docs/engineering/verification/0003-boundary-verification-deployment-installer-final-corrected.md`.
 
 ---
 

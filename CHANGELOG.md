@@ -9,6 +9,79 @@ This file focuses on user-visible and architectural changes, not
 implementation detail — see `docs/architecture/*.md` for the reasoning
 behind each decision, and `docs/*.md` for how the system works today.
 
+## [2.5.0] — 2026-08-11 — Engineering Governance Layer & macOS Toolchain Compatibility
+
+Two largely independent efforts landed in this release. The first
+formalizes how the project verifies its own architecture: a Module
+Contract model, and the governance layer around it, replacing prose-only
+architecture documentation with atomic, individually falsifiable claims a
+Verification Engineer can check against real code — applied to five more
+Deployment-layer modules following `Deployment.Menu`'s own adoption under
+ADR-0013. The second makes Bootstrap environment-aware before it ever
+touches Homebrew, replacing a naive, always-non-fatal Command Line Tools
+check with a data-driven macOS/Xcode/CLT compatibility matrix. See
+`docs/architecture/0013-module-contracts.md` and
+`docs/engineering/MODULE_CONTRACT_MIGRATION_LESSONS.md` for full reasoning
+behind the governance-layer work.
+
+### Added
+
+- The Engineering Governance Layer: `docs/engineering/ENGINEERING_PRINCIPLES.md`,
+  `ENGINEERING_ROLES.md`, `ENGINEERING_VERIFICATION_STANDARD.md`,
+  `VERIFICATION_PROGRAM.md`, and templates for verification, ADR, and
+  engineering reports.
+- The Module Contract model (`docs/architecture/MODULE_STANDARD.md`): seven
+  fields (Purpose, Responsibilities, Consumes, Produces, Collaborates With,
+  Constraints, Defined By) describing a module as atomic, independently
+  checkable claims. ADR-0013 adopts the model and `Deployment.Menu`'s own
+  Contract.
+- Module Contracts drafted and taken through Boundary Verification for
+  `Deployment.Selection`, `Deployment.Planner`, `Deployment.Confirm`,
+  `Deployment.Renderer`, and `Deployment.Installer` — each reached a
+  fully-verified state (19/19, 24/24, 13/13, 23/23, 18/18 respectively)
+  and was adopted per ADR-0013's incremental, module-by-module sequence,
+  joining `Deployment.Menu` as the sixth adopted Contract.
+- `docs/engineering/MODULE_CONTRACT_MIGRATION_LESSONS.md`: a retrospective
+  on the migration effort — recurring patterns, common Contract-defect
+  types, and lessons for future module authors and Verification Engineers.
+- `core/bootstrap/toolchain-matrix.conf`: a patch-banded, data-driven
+  macOS/Xcode/Command Line Tools/Homebrew compatibility matrix — one row
+  per macOS family/patch band, extensible without touching bootstrap code.
+- `core/bootstrap/toolchain.sh`: matrix lookup, Xcode-vs-CLT detection
+  (`xcode-select -p` path classification plus `pkgutil`/`xcodebuild`
+  version metadata), and named, behaviorally-validated capability profiles
+  (`standard_clt`: `clang`/`git` checked by running `--version`, not just
+  checking existence).
+- `core/bootstrap/toolchain_test.sh`: a self-check (no test framework, per
+  this project's own testing convention) covering the required patch-band,
+  version-comparison, and capability-validation scenarios against
+  literal/synthetic inputs — never against the host's real toolchain state.
+
+### Changed
+
+- Bootstrap now runs `prepare_toolchain` before Homebrew installation: it
+  resolves the applicable compatibility row, checks architecture
+  constraints, and only then checks (and, if needed, attempts to install)
+  the required capability profile. A machine below the matrix's floor now
+  stops with a clear diagnostic instead of continuing silently, and a
+  capability failure after an install attempt is treated as failure — never
+  inferred from the install command's exit code alone.
+- Homebrew's own compatibility is never gated on a stored version number or
+  tier label — `BREW_TIER` in the matrix is informational only; the
+  mandatory post-install Homebrew validation (`configure_brew`/
+  `validate_brew`, unchanged) is what actually confirms Homebrew works on
+  this machine, every run.
+
+### Fixed
+
+- Terminal width detection for the responsive Application Catalog grid now
+  reads the controlling terminal directly (`stty size </dev/tty`), falling
+  back to `tput cols` only when no controlling terminal is available.
+  `tput cols` alone, called the way this screen calls it (its own stdout
+  piped into a variable), could silently return a terminfo-default width
+  instead of the real one, always landing on the narrowest column
+  breakpoint regardless of actual terminal size.
+
 ## [2.4.1] — 2026-08-05 — Terminal UI & Deployment UX Refinement
 
 Real-world use of v2.4.0 on actual Macs showed the remaining friction was
@@ -30,7 +103,7 @@ including rejected proposals.
   `--plan`), `render_plan_tree`, and Bootstrap's onboarding wizard (its own
   "how will this Mac be used?" question) are all unchanged.
 - The Application Catalog now renders as a responsive 1–3 column grid,
-  chosen from real terminal width (`tput cols`, re-read on every screen
+  chosen from real terminal width (`stty size`, re-read on every screen
   redraw) — `<100` columns wide stays single-column, `100–149` becomes two
   columns, `150+` becomes three. Numbering runs left-to-right so typed
   ranges (`3-5`) stay visually adjacent. Category headers now show an

@@ -21,23 +21,33 @@ document says so rather than generalizing beyond what was observed.
 
 **Modules taken through the full draft cycle:** `Deployment.Menu`,
 `Deployment.Selection`, `Deployment.Planner`, `Deployment.Confirm`,
-`Deployment.Renderer`.
+`Deployment.Renderer`, `Deployment.Installer`.
 
-**Boundary Verification passes executed:** nine — `Deployment.Menu` (2),
-`Deployment.Selection` (2), `Deployment.Planner` (1), `Deployment.Confirm`
-(2), `Deployment.Renderer` (2). `Deployment.Planner` is the only module
-whose first draft required no correction and therefore no second pass.
+**Boundary Verification passes executed:** thirteen — `Deployment.Menu`
+(2), `Deployment.Selection` (2), `Deployment.Planner` (1),
+`Deployment.Confirm` (2), `Deployment.Renderer` (2), `Deployment.Installer`
+(4). `Deployment.Planner` is the only module whose first draft required no
+correction and therefore no second pass; `Deployment.Installer` is the
+only module that required three correction cycles rather than one.
 
 **Atomic claims checked at final verification:** 20 (`Deployment.Menu`) +
 19 (`Deployment.Selection`) + 24 (`Deployment.Planner`) + 13
-(`Deployment.Confirm`) + 23 (`Deployment.Renderer`) = 99, all VERIFIED at
-the point each module's cycle closed.
+(`Deployment.Confirm`) + 23 (`Deployment.Renderer`) + 18
+(`Deployment.Installer`) = 117, all VERIFIED at the point each module's
+cycle closed.
 
-**Adopted Contracts:** one — `Deployment.Menu`, via ADR-0013.
-`Deployment.Selection`, `Deployment.Planner`, `Deployment.Confirm`, and
-`Deployment.Renderer` each reached a fully-verified state and an explicit
-"ready for adoption" statement in their final Verification Report, but
-none has been adopted through its own ADR within this effort.
+**Adopted Contracts:** six. `Deployment.Menu` was the first, adopted
+directly by ADR-0013's own Decision — the original precedent this entire
+migration follows. `Deployment.Selection`, `Deployment.Planner`,
+`Deployment.Confirm`, `Deployment.Renderer`, and `Deployment.Installer`
+each reached a fully-verified state and an explicit "ready for adoption"
+statement in their final Verification Report, then were formally adopted
+in turn once `MODULE_STANDARD.md` §§10–14 recorded them as having
+completed ADR-0013's own "Adoption is incremental, module by module"
+sequence — drafted, independently Boundary-Verified, corrected where
+findings existed, and re-verified. No per-module ADR was created or
+required; ADR-0013 remains the sole governing adoption decision for all
+six.
 
 **Not part of this migration:** `Deployment.Catalog` and `Platform` have
 Contracts (`MODULE_STANDARD.md` §9), but those were written to pressure-test
@@ -239,11 +249,21 @@ forward, in every single case.
 
 ## What Remains Open
 
-**Four verified Contracts are not yet adopted.** `Deployment.Selection`,
-`Deployment.Planner`, `Deployment.Confirm`, and `Deployment.Renderer` each
-reached a fully-verified state and an explicit "ready for adoption"
-statement, but adoption — the step ADR-0013 took for `Deployment.Menu` —
-has not been performed for any of them within this effort.
+**Five Contracts' adoption status was ambiguous for a period after
+Boundary Verification completed — now resolved, not an open item.**
+`Deployment.Selection`, `Deployment.Planner`, `Deployment.Confirm`,
+`Deployment.Renderer`, and `Deployment.Installer` each reached a
+fully-verified state and an explicit "ready for adoption" statement in
+their own Verification Reports, but for a period afterward
+`MODULE_STANDARD.md`'s own "Status" line for each of their sections still
+read "first draft, not verified, not adopted," unchanged since drafting —
+unlike `Deployment.Menu`, none had yet received an explicit adoption act.
+A governance-model review determined that ADR-0013's own "Adoption is
+incremental, module by module" sequence — drafted, independently
+Boundary-Verified, corrected where findings existed, and re-verified — is
+what the ADR itself defines as sufficient, and does not require a
+dedicated ADR per module. `MODULE_STANDARD.md` §§10–14 were updated
+accordingly; all five Contracts are now adopted.
 
 **One Contract Consistency Observation is unresolved.**
 `Deployment.Menu`'s adopted Contract does not record
@@ -265,9 +285,10 @@ verifying a different module's Contract, not through any dedicated check
 for it. Whether that should become a standing verification of its own is
 not decided here.
 
-**The remaining modules in the Deployment pipeline** — `Deployment.Installer`,
-`Deployment.Transaction`, `Bootstrap`, and every module outside Deployment
-entirely (`Maintenance`, `Diagnostics`, `Reporting`, `Platform`) — have no
-Module Contract yet. `Deployment.Catalog` and `Platform` have Contracts
-that were shape-validated but never boundary-verified. Whether or when
-migration continues is not addressed here.
+**The remaining modules in the Deployment pipeline** — `Deployment.Transaction`,
+`Bootstrap`, and every module outside Deployment entirely (`Maintenance`,
+`Diagnostics`, `Reporting`, `Platform`) — have no Module Contract yet.
+`Deployment.Installer` has since received one (see the bullet above).
+`Deployment.Catalog` and `Platform` have Contracts that were
+shape-validated but never boundary-verified. Whether or when migration
+continues is not addressed here.

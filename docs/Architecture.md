@@ -40,6 +40,8 @@ jb-ToolKit/
     ├── bootstrap/          # Bootstrap sub-modules
     │   ├── ui.sh           # Shared UI primitives (used by ALL modules)
     │   ├── stages.sh       # Numbered stage progress ([1/5], elapsed time)
+    │   ├── toolchain.sh    # macOS/Xcode/CLT compatibility matrix + capability
+    │   │                   #   validation, fatal prerequisite before Homebrew
     │   ├── brew.sh         # Homebrew install / validate / base tools / updates
     │   ├── hardware.sh     # Hardware profile display, Rosetta detection
     │   └── wizard.sh       # Onboarding wizard: one question → Deployment pipeline
@@ -68,7 +70,7 @@ jb-ToolKit/
 | **Launcher** | `jb` | Menu loop; runs modules via `bash <script>`; owns the session |
 | **Foundation** | `core/utils.sh` | Config, colors, state I/O, session logging, `run_cmd`, health score, Homebrew access + query cache, size helpers, `parse_selection`, hardware primitives |
 | **UI layer** | `core/bootstrap/ui.sh` | `print_section`, `success`/`warn`/`info`/`error_msg` (all also write to the session log), banner, completion footer, `ask_yes_no`, elapsed time |
-| **Bootstrap** | `core/bootstrap.sh` + `core/bootstrap/*` | CLT check, Homebrew install, base tools (fastfetch, verified), pending-update offer, hardware summary, onboarding wizard that hands off to the Deployment library |
+| **Bootstrap** | `core/bootstrap.sh` + `core/bootstrap/*` | macOS/toolchain compatibility check against a declarative matrix, fatal before Homebrew is touched (see [ADR-0014](architecture/0014-toolchain-compatibility-matrix.md)), Homebrew install, base tools (fastfetch, verified), pending-update offer, hardware summary, onboarding wizard that hands off to the Deployment library |
 | **Diagnostics** | `core/diagnostics.sh` | System summary, top processes, health score, state write |
 | **Maintenance** | `core/maintenance.sh` + `core/maintenance/*` | Preview-confirm-clean workflow, storage analysis, app cleanup, performance profiles, post-score |
 | **Reporting** | `core/report.sh`, `core/report_pdf.py` | Terminal executive report; optional PDF built from `state.env` + system snapshot |

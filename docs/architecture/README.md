@@ -3,12 +3,14 @@
 Referenced by: [../engineering/README.md](../engineering/README.md) · [../engineering/ENGINEERING_ROLES.md](../engineering/ENGINEERING_ROLES.md) (Engineering Architect) · [../engineering/templates/adr-template.md](../engineering/templates/adr-template.md)
 
 This directory (`docs/architecture/0001-*.md` through the present) is JB
-Toolkit's architectural decision log — twelve decisions on record as of
+Toolkit's architectural decision log — fourteen decisions on record as of
 this writing, from the original platform philosophy
-([0001](0001-platform-philosophy.md)) through the most recent terminal UI
-refinement ([0012](0012-terminal-ui-refinement.md)). This document
-explains what an ADR is for in this project, when to write one, and how
-the collection as a whole is meant to be read and extended.
+([0001](0001-platform-philosophy.md)) through the most recent macOS
+Toolchain Compatibility Matrix
+([0014](0014-toolchain-compatibility-matrix.md)), preceded by the Module
+Contract governance decision ([0013](0013-module-contracts.md)). This
+document explains what an ADR is for in this project, when to write one,
+and how the collection as a whole is meant to be read and extended.
 
 ## Purpose
 

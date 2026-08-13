@@ -1,7 +1,7 @@
 # JB Toolkit — Engineering Documentation
 
 This directory is the official engineering reference for JB Toolkit. It describes the
-architecture **as implemented today** (v2.4.1). It is written for future
+architecture **as implemented today** (v2.5.0). It is written for future
 contributors and AI assistants who need to understand, maintain, or extend the project
 without reverse-engineering it from source.
 
@@ -31,7 +31,7 @@ without reverse-engineering it from source.
 | [engineering/](engineering/) | The Engineering Governance Layer — how the project engineers itself: principles, verification standard, roles, the verification program, and templates. Start at [engineering/README.md](engineering/README.md) |
 
 See also, at the repository root: [CHANGELOG.md](../CHANGELOG.md) (what
-changed, release by release) and [RELEASE_v2.2.2.md](../RELEASE_v2.2.2.md)
+changed, release by release) and [RELEASE_v2.5.0.md](../RELEASE_v2.5.0.md)
 (this release's own summary, written for someone discovering the project for
 the first time).
 

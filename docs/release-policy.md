@@ -15,7 +15,7 @@ API contract in the library-versioning sense — "breaking change" here means
 | Segment | Bumped when | Example |
 |---|---|---|
 | **MAJOR** | The toolkit's shape changes for its user: a module is added, removed, or fundamentally re-scoped; a data format changes in a way existing catalog/state files don't migrate cleanly from | Not yet used past `2` — reserved for that scale of change |
-| **MINOR** | An architectural change ships: a subsystem is redesigned, a data model changes shape (even if old data is migrated automatically), a concept is introduced or removed | v2.1 (Storage Platform), v2.2 (Deployment flattening) |
+| **MINOR** | An architectural change ships: a subsystem is redesigned, a data model changes shape (even if old data is migrated automatically), a concept is introduced or removed | v2.1 (Storage Platform), v2.2 (Deployment flattening), v2.3.0 (Catalog evolution), v2.4.0 (Deployment workflow simplification), v2.5.0 (Module Contract model) |
 | **PATCH** | Consistency, integration, or correctness work within an already-decided architecture: fixing implementation to match documented intent, closing gaps found by real-world use, validation hardening | v2.0.1, v2.2.1 (Catalog consistency), v2.2.2 (Integration hardening) |
 
 The single source of truth for the current version is `JB_VERSION` in

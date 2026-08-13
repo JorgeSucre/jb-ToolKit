@@ -4,7 +4,7 @@ This document separates what **exists today** from what is **planned**, and reco
 known inconsistencies for future consideration. Planned items are goals, not
 designs — no implementation details are prescribed here.
 
-## Implemented today (v2.2.2)
+## Implemented today (v2.5.0)
 
 - Interactive launcher with five modules: Bootstrap, Diagnostics, Maintenance, Deployment, Report
 - Workstation deployment: a flat `Catalog → Applications → Selected
@@ -60,6 +60,40 @@ designs — no implementation details are prescribed here.
 - System snapshot inventory per session
 - Terminal executive report and client-facing PDF (reportlab)
 - Independent release-readiness audit completed; blocking findings fixed
+- Catalog quality metadata (v2.3.0): every application also carries
+  `HOMEPAGE`, `LICENSE`, `PACKAGE_TYPE`, and `ARCHITECTURE`; the Catalog
+  Doctor gained corresponding advisories. See
+  [CATALOG_STANDARD.md](CATALOG_STANDARD.md) and
+  [architecture/0009-catalog-evolution.md](architecture/0009-catalog-evolution.md)
+- Catalog search, filters, and cross-references (v2.3.1–v2.3.2): the
+  Application Catalog supports text search and JB-Pick/hardware-
+  recommendation filters in place, plus an optional `RELATED` field
+  pointing at companion applications. See
+  [architecture/0010-catalog-discoverability.md](architecture/0010-catalog-discoverability.md)
+- Deployment workflow simplification (v2.4.0): catalog-first entry, no
+  mandatory preset-picker screen, hardware recommendations advisory-only
+  (never auto-selecting). See
+  [architecture/0011-deployment-workflow-simplification.md](architecture/0011-deployment-workflow-simplification.md)
+- Responsive terminal catalog grid (v2.4.1; width-detection corrected in
+  v2.5.0): the Application Catalog renders as a 1–3 column grid sized from
+  the real terminal width; presets are no longer loadable from inside the
+  interactive catalog screen (still real everywhere else — `presets.conf`,
+  the CLI, Bootstrap's onboarding wizard). See
+  [architecture/0012-terminal-ui-refinement.md](architecture/0012-terminal-ui-refinement.md)
+- Engineering Governance Layer and the Module Contract model (v2.5.0):
+  architecture described as atomic, independently verifiable claims rather
+  than prose alone; adopted for `Deployment.Menu` (ADR-0013) and, after
+  completing the same Boundary Verification sequence, for five more
+  Deployment-layer modules (`Deployment.Selection`, `Deployment.Planner`,
+  `Deployment.Confirm`, `Deployment.Renderer`, `Deployment.Installer`). See
+  [architecture/0013-module-contracts.md](architecture/0013-module-contracts.md),
+  [engineering/](engineering/), and
+  [engineering/MODULE_CONTRACT_MIGRATION_LESSONS.md](engineering/MODULE_CONTRACT_MIGRATION_LESSONS.md)
+- Environment-aware Bootstrap (v2.5.0): a data-driven macOS/Xcode/Command
+  Line Tools/Homebrew compatibility matrix
+  (`core/bootstrap/toolchain-matrix.conf`) resolved before Homebrew is ever
+  touched, with behaviorally-validated capability checking and mandatory
+  live Homebrew validation
 
 ## Planned (not implemented — do not document as existing)
 
